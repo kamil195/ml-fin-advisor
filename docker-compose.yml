@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────
+#  ML Fin-Advisor — Docker Compose
+# ─────────────────────────────────────────────────────────────
+services:
+  # ── Inference API ──────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile.serve
+    image: fin-advisor-api:latest
+    container_name: fin-advisor-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=info
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ── Redis cache (optional — API falls back to in-memory) ──
+  redis:
+    image: redis:7-alpine
+    container_name: fin-advisor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  redis-data:

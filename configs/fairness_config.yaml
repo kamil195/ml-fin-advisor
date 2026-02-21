@@ -1,0 +1,63 @@
+# ML Fin-Advisor — Fairness Configuration
+# Fairness thresholds & audit settings (SPEC §12)
+
+fairness_audit:
+  enabled: true
+  run_frequency: "on_model_promotion"
+
+  stratification_axes:
+    - name: "income_quintile"
+      bins: 5
+    - name: "account_age_months"
+      bins: [0, 3, 6, 12, 24, 999]
+    - name: "geographic_region"
+      type: "categorical"
+
+  metrics:
+    classification:
+      - metric: "equal_opportunity_difference"
+        axis: "income_quintile"
+        threshold: 0.05
+      - metric: "per_class_recall_min"
+        threshold: 0.80
+
+    impulse_scoring:
+      - metric: "demographic_parity_difference"
+        axis: "income_quintile"
+        threshold: 0.08
+
+    recommendations:
+      - metric: "mean_cut_parity"
+        axis: "income_quintile"
+        relative_threshold: 0.10  # within ±10%
+
+  reporting:
+    output_dir: "reports/fairness"
+    format: ["html", "json"]
+
+privacy:
+  pii_fields:
+    - "merchant_name"
+    - "raw_description"
+    - "location_city"
+  pii_handling: "hash_after_feature_extraction"
+  hash_algorithm: "sha256"
+  encryption_at_rest: "AES-256"
+  encryption_in_transit: "TLS-1.3"
+  deletion_sla_hours: 72
+  differential_privacy:
+    enabled: true
+    epsilon: 8.0
+    scope: "aggregate_statistics"
+
+responsible_ai:
+  confidence_disclaimer_threshold: 0.6
+  disclaimer_text: "This suggestion is based on limited data — please review carefully."
+  prohibited_language:
+    - "you wasted"
+    - "you overspent irresponsibly"
+    - "you failed"
+    - "you should be ashamed"
+  tone: "neutral_or_encouraging"
+  human_escalation: true
+  no_automated_financial_decisions: true

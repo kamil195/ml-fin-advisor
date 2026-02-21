@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────
+#  ML Fin-Advisor — Serving Image
+#  Lightweight image that loads pre-trained artefacts and
+#  exposes the FastAPI REST API on port 8000.
+# ─────────────────────────────────────────────────────────────
+FROM python:3.11-slim AS base
+
+# Prevent .pyc files and enable unbuffered stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8
+
+WORKDIR /app
+
+# ── System dependencies ─────────────────────────────────────
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Python dependencies (only what serving needs) ───────────
+COPY requirements-serve.txt .
+# Exclude NVIDIA CUDA packages (not needed for CPU-only serving)
+RUN pip install --no-cache-dir -r requirements-serve.txt \
+    && pip uninstall -y nvidia-nccl-cu12 nvidia-cuda-runtime-cu12 \
+       nvidia-cuda-cupti-cu12 nvidia-cuda-nvrtc-cu12 \
+       nvidia-cublas-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 \
+       nvidia-cusolver-cu12 nvidia-cusparse-cu12 nvidia-nvjitlink-cu12 \
+       2>/dev/null || true
+
+# ── Application code ────────────────────────────────────────
+COPY src/ ./src/
+COPY configs/ ./configs/
+
+# ── Pre-trained model artefacts ─────────────────────────────
+COPY models/serving/ ./models/serving/
+
+# ── Health-check ─────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+EXPOSE 8000
+
+# ── Entrypoint ───────────────────────────────────────────────
+CMD ["uvicorn", "src.serving.app:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--log-level", "info", \
+     "--timeout-keep-alive", "65"]

@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────
+#  render.yaml — Render Infrastructure-as-Code
+#  https://docs.render.com/infrastructure-as-code
+# ─────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: fin-advisor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: LOG_LEVEL
+        value: info

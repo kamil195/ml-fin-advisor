@@ -1,0 +1,62 @@
+# Data
+data/
+*.parquet
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# MLflow
+mlruns/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Debug / temp scripts
+_debug_*.py
+_test_*.txt
+_docker_*.txt
+diagnose_*.py
+verify_*.py
+
+# Model artefacts (large training outputs) — but NOT models/serving/
+models/training/
+mlflow.db
+
+# Google Cloud SDK temp
+_docker_check.txt
+_docker_log.txt

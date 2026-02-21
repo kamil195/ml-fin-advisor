@@ -1,0 +1,73 @@
+# ML Fin-Advisor — Feature Configuration
+# Feature definitions & transformations (SPEC §5.2)
+
+text_features:
+  merchant_embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+    input_fields: ["merchant_name", "raw_description"]
+    output_dim: 384
+
+  merchant_name_tokens:
+    method: "tfidf_char_trigram"
+    max_features: 5000
+    svd_components: 64
+
+  mcc_embedding:
+    method: "learned"
+    output_dim: 16
+
+numerical_features:
+  log_amount:
+    transform: "log1p_abs"
+  amount_zscore_user:
+    transform: "zscore"
+    scope: "per_user"
+  amount_pct_of_income:
+    transform: "ratio"
+    numerator: "abs_amount"
+    denominator: "estimated_monthly_income"
+  rolling_spend_7d:
+    transform: "rolling_sum"
+    window_days: 7
+    column: "debit_amount"
+  rolling_spend_30d:
+    transform: "rolling_sum"
+    window_days: 30
+    column: "debit_amount"
+  txn_count_24h:
+    transform: "rolling_count"
+    window_hours: 24
+
+temporal_features:
+  cyclical_encodings:
+    - field: "hour_of_day"
+      period: 24
+    - field: "day_of_week"
+      period: 7
+    - field: "day_of_month"
+      period: 31
+  boolean_flags:
+    - "is_weekend"
+    - "is_holiday"
+  month_phase:
+    bins:
+      early: [1, 10]
+      mid: [11, 20]
+      late: [21, 31]
+
+behavioral_features:
+  spending_regime:
+    source: "regime_detector"
+    values: ["normal", "elevated", "reduced", "irregular"]
+  impulse_score:
+    source: "impulse_scorer"
+    range: [0.0, 1.0]
+  habit_strength:
+    source: "habit_index"
+    range: [0.0, 1.0]
+  income_cycle_phase:
+    source: "income_cycle"
+    range: [0.0, 1.0]
+  lifestyle_drift_30d:
+    source: "lifestyle_drift"
+    unit: "percent_change"

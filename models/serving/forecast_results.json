@@ -1,0 +1,157 @@
+{
+  "mape": 8.192844344106197,
+  "per_category": {
+    "Subscriptions & Streaming": 0.92,
+    "Groceries": 10.38,
+    "Restaurants": 3.54,
+    "Ride-Share": 4.57,
+    "Healthcare & Pharmacy": 1.18,
+    "Coffee Shops": 10.18,
+    "Clothing & Accessories": 2.84,
+    "Food Delivery": 7.64,
+    "Electronics": 13.72,
+    "Insurance Premiums": 10.21,
+    "Fees & Charges": 4.8,
+    "Fuel": 26.83,
+    "Home Insurance": 4.79,
+    "Utilities": 1.63,
+    "Loan Payments": 19.67
+  },
+  "forecasts": [
+    {
+      "category": "Subscriptions & Streaming",
+      "p10": 5782.03,
+      "p50": 6354.62,
+      "p90": 6927.22,
+      "actual": 6413.67,
+      "mape_pct": 0.92,
+      "covered": true
+    },
+    {
+      "category": "Groceries",
+      "p10": 49931.59,
+      "p50": 53686.44,
+      "p90": 57441.29,
+      "actual": 59905.9,
+      "mape_pct": 10.38,
+      "covered": false
+    },
+    {
+      "category": "Restaurants",
+      "p10": 17241.23,
+      "p50": 22873.7,
+      "p90": 28506.16,
+      "actual": 22092.5,
+      "mape_pct": 3.54,
+      "covered": true
+    },
+    {
+      "category": "Ride-Share",
+      "p10": 5645.42,
+      "p50": 6347.09,
+      "p90": 7048.77,
+      "actual": 6069.88,
+      "mape_pct": 4.57,
+      "covered": true
+    },
+    {
+      "category": "Healthcare & Pharmacy",
+      "p10": 23373.14,
+      "p50": 26437.4,
+      "p90": 29501.65,
+      "actual": 26752.21,
+      "mape_pct": 1.18,
+      "covered": true
+    },
+    {
+      "category": "Coffee Shops",
+      "p10": 1439.53,
+      "p50": 1605.27,
+      "p90": 1771.01,
+      "actual": 1456.93,
+      "mape_pct": 10.18,
+      "covered": true
+    },
+    {
+      "category": "Clothing & Accessories",
+      "p10": 22195.51,
+      "p50": 23864.61,
+      "p90": 25533.71,
+      "actual": 24563.18,
+      "mape_pct": 2.84,
+      "covered": true
+    },
+    {
+      "category": "Food Delivery",
+      "p10": 5699.48,
+      "p50": 6128.08,
+      "p90": 6556.68,
+      "actual": 6634.84,
+      "mape_pct": 7.64,
+      "covered": false
+    },
+    {
+      "category": "Electronics",
+      "p10": 81195.82,
+      "p50": 107331.68,
+      "p90": 133467.53,
+      "actual": 124401.49,
+      "mape_pct": 13.72,
+      "covered": true
+    },
+    {
+      "category": "Insurance Premiums",
+      "p10": 22601.12,
+      "p50": 25671.82,
+      "p90": 28742.52,
+      "actual": 28589.68,
+      "mape_pct": 10.21,
+      "covered": true
+    },
+    {
+      "category": "Fees & Charges",
+      "p10": 2457.09,
+      "p50": 3002.61,
+      "p90": 3548.13,
+      "actual": 2864.97,
+      "mape_pct": 4.8,
+      "covered": true
+    },
+    {
+      "category": "Fuel",
+      "p10": 6865.72,
+      "p50": 7590.06,
+      "p90": 8314.39,
+      "actual": 5984.63,
+      "mape_pct": 26.83,
+      "covered": false
+    },
+    {
+      "category": "Home Insurance",
+      "p10": 18151.6,
+      "p50": 20373.06,
+      "p90": 22594.52,
+      "actual": 19441.74,
+      "mape_pct": 4.79,
+      "covered": true
+    },
+    {
+      "category": "Utilities",
+      "p10": 20254.34,
+      "p50": 21780.88,
+      "p90": 23307.41,
+      "actual": 21431.58,
+      "mape_pct": 1.63,
+      "covered": true
+    },
+    {
+      "category": "Loan Payments",
+      "p10": 44726.33,
+      "p50": 49681.16,
+      "p90": 54635.98,
+      "actual": 41515.55,
+      "mape_pct": 19.67,
+      "covered": false
+    }
+  ]
+}
