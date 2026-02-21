@@ -1,5 +1,5 @@
-# Data
-data/
+# Data (raw data dir, but NOT src/data/ which is a Python package)
+/data/
 *.parquet
 
 # Python
