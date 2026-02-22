@@ -14,10 +14,11 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.serving.cache import CacheClient, CACHE_TTLS
+from src.serving.middleware import generate_api_key, verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
         ),
         version="1.0.0",
         lifespan=lifespan,
+        dependencies=[Depends(verify_api_key)],
     )
 
     # CORS
@@ -136,6 +138,14 @@ def create_app() -> FastAPI:
     app.include_router(classify_router, prefix="/v1", tags=["Classification"])
     app.include_router(forecast_router, prefix="/v1", tags=["Forecasting"])
     app.include_router(budget_router, prefix="/v1", tags=["Budget"])
+
+    # ── Admin: generate a new API key (prints to stdout) ────────
+    @app.get("/admin/generate-key", tags=["Admin"], include_in_schema=False)
+    async def admin_generate_key():
+        """Generate a random API key (for local/dev use only)."""
+        key = generate_api_key()
+        logger.info("Generated new API key: %s", key)
+        return {"api_key": key, "note": "Add this to the API_KEYS env var."}
 
     return app
 

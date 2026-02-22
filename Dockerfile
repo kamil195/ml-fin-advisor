@@ -32,6 +32,9 @@ COPY configs/ ./configs/
 # ── Pre-trained model artefacts ─────────────────────────────
 COPY models/serving/ ./models/serving/
 
+# API_KEYS: comma-separated valid keys. Empty = auth disabled (open access).
+ENV API_KEYS=""
+
 EXPOSE 8000
 
 # Render sets $PORT; fall back to 8000 for local use

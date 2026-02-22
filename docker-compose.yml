@@ -15,6 +15,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=info
       - PYTHONUNBUFFERED=1
+      - API_KEYS=${API_KEYS:-}   # comma-separated keys; empty = auth disabled
     depends_on:
       redis:
         condition: service_healthy
