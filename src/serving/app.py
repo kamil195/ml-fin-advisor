@@ -100,6 +100,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     from src.serving.routes.budget import router as budget_router
     from src.serving.routes.classify import router as classify_router
+    from src.serving.routes.consumer import router as consumer_router
     from src.serving.routes.forecast import router as forecast_router
     from src.serving.routes.health import router as health_router
     from src.serving.routes.webhooks import router as webhooks_router
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
     app.include_router(classify_router, prefix="/v1", tags=["Classification"])
     app.include_router(forecast_router, prefix="/v1", tags=["Forecasting"])
     app.include_router(budget_router, prefix="/v1", tags=["Budget"])
+    app.include_router(consumer_router, tags=["Consumer"])
     app.include_router(webhooks_router, tags=["Webhooks"])
 
     # ── Admin: generate a new API key (prints to stdout) ────────

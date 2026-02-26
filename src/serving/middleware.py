@@ -34,6 +34,11 @@ _PUBLIC_PATHS: set[str] = {
     "/webhooks/lemonsqueezy",
 }
 
+# Consumer endpoints need their own auth (user_id based), not API key
+_PUBLIC_PREFIXES: tuple[str, ...] = (
+    "/consumer/",
+)
+
 # ── FastAPI security scheme ─────────────────────────────────
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -73,6 +78,9 @@ async def verify_api_key(
 
     # Public paths — always open
     if request.url.path in _PUBLIC_PATHS:
+        return
+    # Consumer endpoints use their own user_id gating
+    if request.url.path.startswith(_PUBLIC_PREFIXES):
         return
 
     valid_keys = _load_api_keys()

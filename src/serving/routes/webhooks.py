@@ -17,6 +17,7 @@ import time
 
 from fastapi import APIRouter, HTTPException, Request
 
+from src.serving.consumer import SubStatus, consumer_store
 from src.serving.middleware import generate_api_key
 from src.serving.subscriptions import (
     PlanTier,
@@ -164,6 +165,10 @@ async def lemonsqueezy_webhook(request: Request):
             "Provisioned key=%s…%s plan=%s for %s",
             api_key[:8], api_key[-4:], plan.name, email,
         )
+
+        # ── Also upgrade the consumer user if they exist ────
+        _upgrade_consumer_user(email, sub_id)
+
         return {
             "status": "ok",
             "event": event_name,
@@ -208,6 +213,10 @@ async def lemonsqueezy_webhook(request: Request):
             subscription_store.upsert(existing)
             _remove_from_api_keys_env(existing.api_key)
             logger.info("Deactivated key for sub_id=%d (%s)", sub_id, event_name)
+
+        # Downgrade consumer user
+        _downgrade_consumer_user(email)
+
         return {"status": "ok", "event": event_name}
 
     # ── subscription_payment_success ────────────────────────
@@ -251,3 +260,28 @@ def _remove_from_api_keys_env(api_key: str) -> None:
     keys = {k.strip() for k in raw.split(",") if k.strip()}
     keys.discard(api_key)
     os.environ["API_KEYS"] = ",".join(keys)
+
+
+# ── Consumer user lifecycle helpers ─────────────────────────────
+
+
+def _upgrade_consumer_user(email: str, subscription_id: int) -> None:
+    """Mark a consumer user as paid when their subscription activates."""
+    user = consumer_store.get_by_email(email)
+    if user is None:
+        logger.debug("No consumer user for email=%s — skip upgrade", email)
+        return
+    user.subscription_status = SubStatus.PAID
+    user.lemon_squeezy_subscription_id = subscription_id
+    consumer_store.update(user)
+    logger.info("Consumer user %s upgraded to PAID (sub=%d)", user.user_id, subscription_id)
+
+
+def _downgrade_consumer_user(email: str) -> None:
+    """Revert a consumer user back to free tier when subscription ends."""
+    user = consumer_store.get_by_email(email)
+    if user is None:
+        return
+    user.subscription_status = SubStatus.CANCELLED
+    consumer_store.update(user)
+    logger.info("Consumer user %s downgraded to CANCELLED", user.user_id)
