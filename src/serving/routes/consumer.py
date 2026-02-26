@@ -20,7 +20,10 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from src.serving.consumer import (
+    CONSUMER_ANNUAL_ID,
+    CONSUMER_MONTHLY_ID,
     FREE_TIER_LIMIT,
+    LEMON_SQUEEZY_CHECKOUT_URL,
     AnalysisResult,
     SubStatus,
     consumer_store,
@@ -69,9 +72,11 @@ class UpgradeRequest(BaseModel):
 
 
 class UpgradeResponse(BaseModel):
-    checkout_url: str
-    plan: str
-    price: str
+    monthly_url: str
+    annual_url: str
+    monthly_price: str
+    annual_price: str
+    annual_savings: str
 
 
 class HistoryItem(BaseModel):
@@ -142,7 +147,8 @@ async def analyse_transaction(body: AnalyseRequest, request: Request):
                 ),
                 "free_tier_used": user.free_tier_used,
                 "free_tier_limit": FREE_TIER_LIMIT,
-                "upgrade_url": _build_checkout_url(user.user_id, user.email),
+                "monthly_url": _build_checkout_url(user.user_id, user.email, CONSUMER_MONTHLY_ID),
+                "annual_url": _build_checkout_url(user.user_id, user.email, CONSUMER_ANNUAL_ID),
             },
         )
 
@@ -186,17 +192,17 @@ async def analyse_transaction(body: AnalyseRequest, request: Request):
 
 @router.post("/upgrade", response_model=UpgradeResponse)
 async def upgrade(body: UpgradeRequest):
-    """Return a Lemon Squeezy checkout URL pre-filled with user info."""
+    """Return Lemon Squeezy checkout URLs for monthly and annual plans."""
     user = consumer_store.get(body.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    checkout_url = _build_checkout_url(user.user_id, user.email)
-
     return UpgradeResponse(
-        checkout_url=checkout_url,
-        plan="Pro",
-        price="$49.99/mo",
+        monthly_url=_build_checkout_url(user.user_id, user.email, CONSUMER_MONTHLY_ID),
+        annual_url=_build_checkout_url(user.user_id, user.email, CONSUMER_ANNUAL_ID),
+        monthly_price="$4.99/month",
+        annual_price="$49/year",
+        annual_savings="Save 18%",
     )
 
 
@@ -227,16 +233,12 @@ async def get_history(user_id: str, limit: int = 20):
 # ── Helpers ─────────────────────────────────────────────────────
 
 
-def _build_checkout_url(user_id: str, email: str) -> str:
+def _build_checkout_url(user_id: str, email: str, variant_id: str) -> str:
     """Build a Lemon Squeezy checkout URL with pre-fill parameters."""
-    base = os.getenv(
-        "LEMONSQUEEZY_CHECKOUT_URL",
-        "https://fin-advisor.lemonsqueezy.com/buy",
-    )
-    pro_variant = os.getenv("PLAN_PRO_ID", "1346293")
+    base = LEMON_SQUEEZY_CHECKOUT_URL
     # Lemon Squeezy checkout supports ?checkout[email]=…&checkout[custom][user_id]=…
     return (
-        f"{base}/{pro_variant}"
+        f"{base}/{variant_id}"
         f"?checkout[email]={email}"
         f"&checkout[custom][user_id]={user_id}"
     )

@@ -30,8 +30,10 @@ logger = logging.getLogger(__name__)
 FREE_TIER_LIMIT = int(os.getenv("FREE_TIER_LIMIT", "5"))
 LEMON_SQUEEZY_CHECKOUT_URL = os.getenv(
     "LEMONSQUEEZY_CHECKOUT_URL",
-    "https://fin-advisor.lemonsqueezy.com/buy",  # placeholder
+    "https://fin-advisor.lemonsqueezy.com/buy",
 )
+CONSUMER_MONTHLY_ID = os.getenv("CONSUMER_MONTHLY_ID", "1347269")
+CONSUMER_ANNUAL_ID = os.getenv("CONSUMER_ANNUAL_ID", "1347297")
 
 _PERSIST_DIR = Path(__file__).resolve().parents[2] / "data" / "consumer"
 

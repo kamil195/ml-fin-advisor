@@ -47,7 +47,22 @@ def _analyse(uid: str, txn: dict):
 
 
 def _upgrade(uid: str):
+    """Return monthly + annual checkout URLs."""
     return _api("post", "/consumer/upgrade", json={"user_id": uid})
+
+
+def _upgrade_buttons(uid: str) -> None:
+    """Render side-by-side Monthly / Annual upgrade buttons."""
+    code, data = _upgrade(uid)
+    if code != 200:
+        return
+    col_m, col_a = st.columns(2)
+    with col_m:
+        st.markdown("**Monthly** — **$4.99/month**")
+        st.link_button("⬆️ Upgrade Monthly", data["monthly_url"], type="primary")
+    with col_a:
+        st.markdown("**Annual** — **$49/year** (save 18%)")
+        st.link_button("⬆️ Upgrade Annual", data["annual_url"], type="primary")
 
 
 def _history(uid: str, limit: int = 20):
@@ -132,13 +147,15 @@ if not st.session_state.signed_in:
         3. **Upgrade** to Pro for unlimited access
 
         ### What you get
-        | Feature | Free | Pro ($49.99/mo) |
+        | Feature | Free | Pro |
         |---|:---:|:---:|
         | Transaction classification | 5 total | **Unlimited** |
         | SHAP explanations | ✅ | ✅ |
         | Anchor rules | ✅ | ✅ |
         | Analysis history | ✅ | ✅ |
         | Priority support | — | ✅ |
+
+        **Pricing:** $4.99/month · or $49/year (save 18%)
         """
     )
     st.stop()
@@ -228,9 +245,8 @@ with tab_analyse:
             err = detail.get("detail", detail)
             if isinstance(err, dict):
                 st.error(f"🔒 {err.get('message', 'Free tier exhausted')}")
-                upgrade_url = err.get("upgrade_url", "")
-                if upgrade_url:
-                    st.link_button("⬆️ Upgrade to Pro", upgrade_url)
+                st.markdown("#### Choose a plan to continue")
+                _upgrade_buttons(u["user_id"])
             else:
                 st.error(str(err))
         else:
@@ -239,10 +255,10 @@ with tab_analyse:
     if not can_go:
         st.divider()
         st.markdown("### 🔓 Unlock Unlimited Analyses")
-        st.markdown("Upgrade to **Pro** for **$49.99/month** and get unlimited access.")
-        code2, data2 = _upgrade(u["user_id"])
-        if code2 == 200:
-            st.link_button("⬆️ Upgrade Now", data2["checkout_url"], type="primary")
+        st.markdown(
+            "Choose a plan to keep classifying transactions with full AI explanations."
+        )
+        _upgrade_buttons(u["user_id"])
 
 # ── Tab 2: History ──────────────────────────────────────────────
 
@@ -310,9 +326,7 @@ with tab_account:
                 - **Unlimited** transaction classifications
                 - Full SHAP + Anchor explanations
                 - Priority support
-                - **$49.99/month** — cancel anytime
+                - Cancel anytime
                 """
             )
-            code3, data3 = _upgrade(u["user_id"])
-            if code3 == 200:
-                st.link_button("⬆️ Upgrade to Pro", data3["checkout_url"], type="primary")
+            _upgrade_buttons(u["user_id"])
