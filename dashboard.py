@@ -163,7 +163,38 @@ else:
         st.markdown("# Dashboard")
         st.markdown("")
         
-        # TODO: Step 2 - Add metrics here
+        # Metrics row
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("""
+            <div style="padding: 1.5rem 0;">
+                <div style="color: #64748B; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">TOTAL BALANCE</div>
+                <div style="color: #1E293B; font-size: 2.5rem; font-weight: 500; line-height: 1.2;">$24,562.00</div>
+                <div style="color: #10B981; font-size: 0.875rem;">▲ +2.4% vs last month</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown("""
+            <div style="padding: 1.5rem 0;">
+                <div style="color: #64748B; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">MONTHLY INCOME</div>
+                <div style="color: #1E293B; font-size: 2.5rem; font-weight: 500; line-height: 1.2;">$8,450.00</div>
+                <div style="color: #10B981; font-size: 0.875rem;">▲ +5.1% vs last month</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown("""
+            <div style="padding: 1.5rem 0;">
+                <div style="color: #64748B; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em;">MONTHLY EXPENSES</div>
+                <div style="color: #1E293B; font-size: 2.5rem; font-weight: 500; line-height: 1.2;">$3,240.50</div>
+                <div style="color: #EF4444; font-size: 0.875rem;">▼ -1.2% vs last month</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("")  # Extra spacing for next steps
         
     elif st.session_state.page == "Classify":
         st.markdown("# Transaction Classifier")
