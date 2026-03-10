@@ -241,12 +241,22 @@ else:
         channel_map = {"In Store": "POS", "Online": "ONLINE", "ATM": "ATM", "Transfer": "TRANSFER"}
         api_channel = channel_map[channel]
         
+        # Check API key exists
+        if not st.session_state.get("api_key"):
+            st.warning("⚠️ Please enter your API key in the sidebar first")
+        
         # Classify button
         if st.button("🔍 Analyze Transaction", type="primary", use_container_width=True):
+            if not st.session_state.get("api_key"):
+                st.error("🔑 You need an API key to analyze transactions. Enter it in the sidebar.")
+                st.stop()
             if merchant and amount != 0:
                 with st.spinner("🧠 AI is thinking..."):
                     # Call API
-                    headers = {"X-API-Key": st.session_state.api_key}
+                    headers = {
+                        "X-API-Key": st.session_state.api_key,
+                        "Content-Type": "application/json"
+                    }
                     payload = {
                         "amount": amount,
                         "merchant_name": merchant,
