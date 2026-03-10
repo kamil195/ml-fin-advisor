@@ -1,20 +1,15 @@
 [server]
-# Disable file watching to prevent inotify limit error
+# Disable all file watching
 enableCORS = true
 enableXsrfProtection = true
 enableWebsocketCompression = false
 maxUploadSize = 200
-
-[runner]
-# Don't watch for file changes
-watchFileSystem = false
+fileWatcherType = "none"  # Critical: Disable file watching
 
 [logger]
-# Reduce logging
 level = "error"
 
 [theme]
-# Minimalist theme (Theme 4)
 primaryColor = "#6366F1"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F8FAFC"
