@@ -31,7 +31,7 @@ st.markdown("""
     }
     
     /* Remove all borders, boxes, shadows */
-    .stCard, .stContainer, div[data-testid="stVerticalBlock"] {
+    div[data-testid="stVerticalBlock"] {
         border: none !important;
         box-shadow: none !important;
         background: none !important;
@@ -53,40 +53,20 @@ st.markdown("""
         font-weight: 400 !important;
     }
     
-    /* Remove default Streamlit borders */
-    div[data-testid="stThumbnail"] {
-        border: none !important;
-    }
-    
     /* Clean sidebar */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF !important;
         border-right: none !important;
     }
     
+    /* Remove all template boxes */
+    div[data-testid="stThumbnail"] {
+        border: none !important;
+    }
+    
     /* Spacing only, no lines */
     hr {
         display: none !important;
-    }
-    
-    /* Metric cards styling */
-    .metric-container {
-        padding: 1rem 0;
-    }
-    .metric-label {
-        color: #64748B;
-        font-size: 0.875rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    .metric-value {
-        color: #1E293B;
-        font-size: 2rem;
-        font-weight: 500;
-    }
-    .metric-change {
-        color: #10B981;
-        font-size: 0.875rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -108,33 +88,32 @@ API_URL = "https://fin-advisor-sa6h.onrender.com"
 
 # Sidebar
 with st.sidebar:
-    # Logo and brand
-    st.markdown("## \U0001F4B0 FinWise AI")
-    st.markdown("---")
+    # Brand
+    st.markdown("## 💰 FinWise AI")
+    st.markdown("")
     
     # Navigation
-    if st.button("\U0001F4CA Dashboard", use_container_width=True):
+    if st.button("📊 Dashboard", use_container_width=True):
         st.session_state.page = "Dashboard"
-    if st.button("\U0001F4DD Classify", use_container_width=True):
+    if st.button("📝 Classify", use_container_width=True):
         st.session_state.page = "Classify"
-    if st.button("\U0001F4C8 Forecast", use_container_width=True):
+    if st.button("📈 Forecast", use_container_width=True):
         st.session_state.page = "Forecast"
-    if st.button("\U0001F4B0 Budget", use_container_width=True):
+    if st.button("💰 Budget", use_container_width=True):
         st.session_state.page = "Budget"
-    if st.button("\u2699\uFE0F Settings", use_container_width=True):
-        st.session_state.page = "Settings"
+    if st.button("ℹ️ About", use_container_width=True):
+        st.session_state.page = "About"
     
     st.markdown("---")
     
-    # User profile
+    # User
     if st.session_state.authenticated:
-        st.markdown(f"**\U0001F464 {st.session_state.email}**")
-        if st.button("\U0001F6AA Logout", use_container_width=True):
+        st.markdown(f"**👤 {st.session_state.email}**")
+        if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
-            st.session_state.api_key = None
             st.rerun()
     else:
-        st.markdown("### \U0001F510 Login")
+        st.markdown("### 🔐 Login")
         email = st.text_input("Email", placeholder="your@email.com")
         api_key = st.text_input("API Key", type="password", placeholder="Enter your API key")
         if st.button("Connect", use_container_width=True):
@@ -359,7 +338,13 @@ else:
         
         # TODO: Step 5 - Add budget with \U0001f50d What affects this budget explanations
         
-    elif st.session_state.page == "Settings":
-        st.markdown("# Settings")
+    elif st.session_state.page == "About":
+        st.markdown("# About FinWise AI")
         st.markdown("")
-        st.info("Settings page coming soon...")
+        st.markdown("**FinWise AI** is an intelligent financial advisor powered by machine learning.")
+        st.markdown("")
+        st.markdown("- 🎯 **99.96%** transaction classification accuracy")
+        st.markdown("- 📈 **92%** spending forecast accuracy")
+        st.markdown("- 💰 **80.9%** budget recommendation acceptance")
+        st.markdown("")
+        st.markdown("Built with LightGBM, ensemble forecasting, and SHAP explainability.")
