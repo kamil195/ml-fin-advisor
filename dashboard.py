@@ -7,9 +7,12 @@ import plotly.graph_objects as go
 from datetime import datetime
 import time
 
-# Disable file watching to prevent inotify limit error
+# CRITICAL: Disable ALL file watching to prevent inotify error
 os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"
 os.environ["STREAMLIT_SERVER_WATCH_FILE_SYSTEM"] = "false"
+os.environ["STREAMLIT_SERVER_WATCH_CONFIG"] = "false"
+os.environ["STREAMLIT_SERVER_WATCH_MODULES"] = "false"
+os.environ["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
 
 # Page config
 st.set_page_config(
