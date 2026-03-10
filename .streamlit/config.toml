@@ -1,0 +1,22 @@
+[server]
+# Disable file watching to prevent inotify limit error
+enableCORS = true
+enableXsrfProtection = true
+enableWebsocketCompression = false
+maxUploadSize = 200
+
+[runner]
+# Don't watch for file changes
+watchFileSystem = false
+
+[logger]
+# Reduce logging
+level = "error"
+
+[theme]
+# Minimalist theme (Theme 4)
+primaryColor = "#6366F1"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8FAFC"
+textColor = "#1E293B"
+font = "sans serif"
