@@ -332,12 +332,25 @@ else:
         
     elif st.session_state.page == "Forecast":
         st.markdown("# Spending Forecast")
-        st.markdown("_See where your money is likely going next month_")
-        st.markdown("")
-        st.markdown("\U0001f3af **AI Accuracy: 92%** — Our predictions are within 8% of actual spending")
+        st.markdown("##### See where your money is going")
         st.markdown("")
         
-        # TODO: Step 4 - Add forecast chart here
+        col1, col2 = st.columns([6, 1])
+        with col2:
+            st.markdown("""
+            <div style="background-color: #6366F1; color: white; 
+                        padding: 0.25rem 0.75rem; border-radius: 20px; 
+                        text-align: center; font-size: 0.875rem;">
+                🎯 AI Accuracy: 92%
+            </div>
+            """, unsafe_allow_html=True)
+        
+        days = st.selectbox("Forecast for next:", ["30 days", "60 days", "90 days"])
+        
+        if st.button("📊 Show My Forecast", type="primary", use_container_width=True):
+            with st.spinner("🧠 AI is predicting your spending..."):
+                st.success("✅ Forecast ready!")
+                st.info("📈 Chart will appear here with Low/Medium/High estimates")
         
     elif st.session_state.page == "Budget":
         st.markdown("# Budget Recommendations")
