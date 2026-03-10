@@ -125,6 +125,13 @@ with st.sidebar:
                 st.success("Connected!")
                 time.sleep(1)
                 st.rerun()
+        st.markdown("")
+        if st.button("Use Demo Account", use_container_width=True):
+            st.session_state.email = "demo@example.com"
+            st.session_state.api_key = "demo_key_123"
+            st.session_state.authenticated = True
+            st.session_state.user_id = "user_demo_001"
+            st.rerun()
 
 # Main content area
 if not st.session_state.authenticated:
