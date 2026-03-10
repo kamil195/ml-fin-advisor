@@ -200,7 +200,110 @@ else:
         st.markdown("# Transaction Classifier")
         st.markdown("")
         
-        # TODO: Step 3 - Add classifier here
+        # Sample transaction buttons
+        st.markdown("##### Test with sample transactions")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            if st.button("NETFLIX", use_container_width=True):
+                st.session_state.test_merchant = "NETFLIX"
+                st.session_state.test_amount = -15.99
+                st.session_state.test_mcc = 4899
+        
+        with col2:
+            if st.button("SHELL", use_container_width=True):
+                st.session_state.test_merchant = "SHELL"
+                st.session_state.test_amount = -45.00
+                st.session_state.test_mcc = 5541
+        
+        with col3:
+            if st.button("WHOLE FOODS", use_container_width=True):
+                st.session_state.test_merchant = "WHOLE FOODS"
+                st.session_state.test_amount = -89.32
+                st.session_state.test_mcc = 5411
+        
+        with col4:
+            if st.button("UBER", use_container_width=True):
+                st.session_state.test_merchant = "UBER"
+                st.session_state.test_amount = -24.50
+                st.session_state.test_mcc = 4121
+        
+        with col5:
+            if st.button("AMAZON", use_container_width=True):
+                st.session_state.test_merchant = "AMAZON"
+                st.session_state.test_amount = -67.23
+                st.session_state.test_mcc = 5311
+        
+        st.markdown("---")
+        st.markdown("##### Enter transaction details")
+        
+        # Transaction form
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            merchant = st.text_input("Merchant Name", 
+                                    value=st.session_state.get("test_merchant", ""),
+                                    placeholder="e.g., STARBUCKS")
+            amount = st.number_input("Amount ($)", 
+                                    value=st.session_state.get("test_amount", 0.0),
+                                    format="%.2f")
+        
+        with col2:
+            mcc = st.number_input("MCC Code", 
+                                 value=st.session_state.get("test_mcc", 0),
+                                 help="Merchant Category Code")
+            channel = st.selectbox("Channel", ["POS", "ONLINE", "ATM", "TRANSFER"])
+        
+        # Classify button
+        if st.button("🔍 Classify Transaction", type="primary", use_container_width=True):
+            if merchant and amount != 0:
+                with st.spinner("AI is classifying..."):
+                    # Call API
+                    headers = {"X-API-Key": st.session_state.api_key}
+                    payload = {
+                        "amount": amount,
+                        "merchant_name": merchant,
+                        "merchant_mcc": mcc,
+                        "timestamp": datetime.now().isoformat(),
+                        "channel": channel
+                    }
+                    
+                    try:
+                        response = requests.post(
+                            f"{API_URL}/v1/classify",
+                            json=payload,
+                            headers=headers
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            
+                            # Show result
+                            st.markdown("---")
+                            st.markdown("##### Classification Result")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.markdown(f"**Category**")
+                                st.markdown(f"### {data['category_l2']}")
+                            with col2:
+                                st.markdown(f"**Confidence**")
+                                st.markdown(f"### {data['confidence']*100:.2f}%")
+                            with col3:
+                                st.markdown(f"**Impulse Score**")
+                                st.markdown(f"### {data.get('impulse_score', 0)*100:.1f}%")
+                            
+                            # SHAP explanations
+                            if 'shap_top_features' in data:
+                                with st.expander("🧠 Why this category?"):
+                                    for feat in data['shap_top_features']:
+                                        st.markdown(f"• **{feat['feature']}**: {feat['impact']}")
+                        else:
+                            st.error(f"Error: {response.status_code}")
+                    except Exception as e:
+                        st.error(f"Connection error: {e}")
+            else:
+                st.warning("Please enter merchant name and amount")
         
     elif st.session_state.page == "Forecast":
         st.markdown("# Spending Forecast")
