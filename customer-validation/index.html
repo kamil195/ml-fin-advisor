@@ -1,0 +1,778 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight AI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0d0d0b;--ink2:#3d3c38;--ink3:#8c8b84;--ink4:#b8b7b0;
+  --paper:#f9f7f3;--paper2:#f2efe8;--paper3:#e8e4da;--paper4:#d8d3c8;
+  --white:#fff;
+  --g1:#1b4f3e;--g2:#2a7a5c;--g3:#3dab7e;--g4:#7dd9b0;--g5:#c4f0de;
+  --b1:#1a3560;--b2:#2b5499;--b3:#4a82d4;--b4:#9bbce8;--b5:#ddeaf8;
+  --a1:#7a3510;--a2:#c45c1a;--a3:#f07d3a;--a4:#f5b07a;--a5:#fde9d6;
+  --v1:#3a2270;--v2:#6040b8;--v3:#8e6ce0;--v4:#c0a8f0;--v5:#ece6fd;
+  --r:12px;--rs:6px;--r2:20px;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 4px 12px rgba(0,0,0,.04);
+  --font-body:Inter,system-ui,-apple-system,sans-serif;
+  --font-serif:'DM Serif Display',Georgia,serif;
+  --font-mono:'DM Mono','Courier New',monospace;
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font-body);background:var(--paper);color:var(--ink);line-height:1.6;font-size:15px}
+a{text-decoration:none;color:inherit}
+
+/* NAV */
+.topbar{background:var(--paper);border-bottom:1px solid var(--paper3);padding:0 2rem;position:sticky;top:0;z-index:200}
+.nav-inner{max-width:1160px;margin:0 auto;height:64px;display:flex;align-items:center;gap:2rem}
+.nav-logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.logo-mark{width:34px;height:34px;background:var(--g1);border-radius:9px;display:flex;align-items:center;justify-content:center}
+.logo-mark svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo-name{font-size:15px;font-weight:600;letter-spacing:-.02em;color:var(--ink);display:block}
+.logo-tag{font-size:10px;color:var(--ink3);font-family:var(--font-mono);letter-spacing:.05em;display:block}
+.nav-links{display:flex;gap:.25rem;flex:1;justify-content:center}
+.nav-links a{font-size:13.5px;color:var(--ink2);padding:6px 14px;border-radius:var(--rs);font-weight:500;transition:background .15s,color .15s}
+.nav-links a:hover{background:var(--paper2);color:var(--ink)}
+.nav-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.btn-outline{font-size:13px;font-weight:500;padding:7px 18px;border-radius:var(--r2);border:1px solid var(--paper4);background:transparent;color:var(--ink2);cursor:pointer;font-family:var(--font-body);transition:border-color .15s,color .15s}
+.btn-outline:hover{border-color:var(--ink3);color:var(--ink)}
+.btn-solid{font-size:13px;font-weight:500;padding:8px 20px;border-radius:var(--r2);border:none;background:var(--g1);color:#fff;cursor:pointer;font-family:var(--font-body);transition:background .15s}
+.btn-solid:hover{background:var(--g2)}
+.nav-badge{background:var(--g5);color:var(--g1);font-size:11px;font-family:var(--font-mono);padding:3px 9px;border-radius:20px;font-weight:500;border:1px solid var(--g4)}
+
+/* HERO */
+.hero{max-width:1160px;margin:0 auto;padding:5rem 2rem 4rem;display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:center}
+.hero-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--paper4);border-radius:20px;padding:5px 14px 5px 10px;margin-bottom:1.75rem;background:var(--white)}
+.hp-dot{width:7px;height:7px;background:var(--g3);border-radius:50%}
+.hp-text{font-size:12px;color:var(--ink3);font-family:var(--font-mono)}
+h1{font-family:var(--font-serif);font-size:52px;line-height:1.08;letter-spacing:-.02em;color:var(--ink);margin-bottom:1.25rem}
+h1 em{color:var(--g2);font-style:italic}
+.hero-sub{font-size:16px;color:var(--ink2);line-height:1.75;max-width:420px;margin-bottom:2rem}
+.hero-actions{display:flex;gap:12px;align-items:center;margin-bottom:2.5rem}
+.btn-lg{font-size:14px;font-weight:500;padding:11px 28px;border-radius:24px;border:none;background:var(--ink);color:#fff;cursor:pointer;font-family:var(--font-body);transition:background .15s}
+.btn-lg:hover{background:var(--g1)}
+.btn-lg-ghost{font-size:14px;font-weight:500;padding:10px 24px;border-radius:24px;border:1.5px solid var(--paper4);background:transparent;color:var(--ink2);cursor:pointer;font-family:var(--font-body);display:flex;align-items:center;gap:7px;transition:border-color .15s,color .15s}
+.btn-lg-ghost:hover{border-color:var(--ink3);color:var(--ink)}
+.hero-kpis{display:flex;gap:2rem}
+.kpi-val{font-family:var(--font-mono);font-size:22px;font-weight:500;color:var(--ink);margin-bottom:2px}
+.kpi-label{font-size:12px;color:var(--ink3)}
+
+.hero-right{position:relative}
+.h-float{position:absolute;background:var(--white);border:1px solid var(--paper3);border-radius:var(--rs);padding:10px 14px;box-shadow:var(--sh);font-size:12px;z-index:5}
+.hf1{top:-18px;right:-8px}.hf2{bottom:-14px;left:-10px}
+.hf-label{font-size:10px;color:var(--ink3);font-family:var(--font-mono);margin-bottom:2px}
+.hf-val{font-family:var(--font-mono);font-size:13px;font-weight:500}
+.hf-green{color:var(--g2)}.hf-orange{color:var(--a2)}
+.h-card{background:var(--white);border:1px solid var(--paper3);border-radius:var(--r);padding:1.25rem;box-shadow:var(--sh)}
+.hc-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.75rem}
+.hc-t1{font-size:12px;color:var(--ink2);font-weight:500}
+.hc-t2{font-size:11px;color:var(--ink3);margin-top:1px}
+.hc-badge{background:var(--g5);color:var(--g1);font-size:10px;font-family:var(--font-mono);padding:3px 9px;border-radius:10px;border:1px solid var(--g4)}
+.hc-amt{font-family:var(--font-mono);font-size:30px;font-weight:500;color:var(--ink);margin-bottom:.75rem}
+.bar-list{display:flex;flex-direction:column;gap:8px;margin-bottom:1rem}
+.bar-row{display:flex;align-items:center;gap:8px}
+.bar-name{font-size:12px;color:var(--ink2);width:90px;flex-shrink:0}
+.bar-track{flex:1;height:5px;background:var(--paper2);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px}
+.bar-amt{font-family:var(--font-mono);font-size:11px;color:var(--ink3);width:44px;text-align:right}
+.pill-row{display:flex;gap:6px}
+.pill{font-size:11px;font-family:var(--font-mono);padding:3px 10px;border-radius:10px;border:1px solid var(--paper3);color:var(--ink3)}
+.pill.on{background:var(--g1);color:#fff;border-color:var(--g1)}
+
+/* TRUST */
+.trust{border-top:1px solid var(--paper3);border-bottom:1px solid var(--paper3);background:var(--white)}
+.trust-inner{max-width:1160px;margin:0 auto;padding:1.25rem 2rem;display:flex;align-items:center;justify-content:space-between;gap:2rem}
+.trust-label{font-size:12px;color:var(--ink3);font-family:var(--font-mono);flex-shrink:0}
+.trust-items{display:flex;gap:2rem;flex-wrap:wrap}
+.trust-item{font-size:13px;color:var(--ink2);display:flex;align-items:center;gap:6px;font-weight:500}
+.ti-dot{width:5px;height:5px;background:var(--g3);border-radius:50%}
+
+/* SECTION */
+.section{max-width:1160px;margin:0 auto;padding:5rem 2rem}
+.s-eyebrow{font-size:11px;font-family:var(--font-mono);color:var(--ink3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.5rem}
+.s-title{font-family:var(--font-serif);font-size:38px;line-height:1.15;color:var(--ink);margin-bottom:.85rem;letter-spacing:-.015em}
+.s-desc{font-size:15px;color:var(--ink2);max-width:500px;line-height:1.75;margin-bottom:2.5rem}
+
+/* OCR SECTION */
+.ocr-wrap{background:var(--white);border:1px solid var(--paper3);border-radius:16px;padding:2rem;box-shadow:var(--sh)}
+.ocr-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.ocr-left{display:flex;flex-direction:column;gap:1rem}
+.ocr-drop{border:2px dashed var(--paper4);border-radius:var(--r);padding:2rem 1.5rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;background:var(--paper2);position:relative}
+.ocr-drop:hover,.ocr-drop.drag-over{border-color:var(--g3);background:var(--g5)}
+.ocr-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.ocr-drop-icon{width:40px;height:40px;background:var(--paper3);border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem}
+.ocr-drop-icon svg{width:20px;height:20px;stroke:var(--ink3);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ocr-drop-title{font-size:14px;font-weight:500;color:var(--ink);margin-bottom:4px}
+.ocr-drop-sub{font-size:12px;color:var(--ink3)}
+.ocr-preview{display:none;border-radius:var(--rs);overflow:hidden;border:1px solid var(--paper3);max-height:180px;position:relative}
+.ocr-preview img{width:100%;height:180px;object-fit:cover;display:block}
+.ocr-preview-name{position:absolute;bottom:0;left:0;right:0;background:rgba(13,13,11,.6);color:#fff;font-size:11px;font-family:var(--font-mono);padding:6px 10px}
+.ocr-btn{width:100%;padding:11px;border-radius:var(--r2);border:none;background:var(--g1);color:#fff;font-size:14px;font-weight:500;font-family:var(--font-body);cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.ocr-btn:hover{background:var(--g2)}
+.ocr-btn:disabled{background:var(--paper4);color:var(--ink3);cursor:not-allowed}
+.ocr-spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Error / status toast */
+.ocr-toast{display:none;border-radius:var(--rs);padding:10px 14px;font-size:13px;margin-top:0;align-items:flex-start;gap:10px;border:1px solid}
+.ocr-toast.error{background:#fff5f5;border-color:#ffc5c5;color:#9b2c2c;display:flex}
+.ocr-toast.success{background:var(--g5);border-color:var(--g4);color:var(--g1);display:flex}
+.ocr-toast.info{background:var(--b5);border-color:var(--b4);color:var(--b1);display:flex}
+.toast-ico{flex-shrink:0;font-size:15px;line-height:1.3}
+.toast-msg b{font-weight:500}
+.toast-msg{font-size:12px;line-height:1.5}
+.retry-btn{background:none;border:1px solid currentColor;border-radius:20px;padding:3px 10px;font-size:11px;font-family:var(--font-body);cursor:pointer;color:inherit;margin-top:6px;display:inline-block;opacity:.8}
+.retry-btn:hover{opacity:1}
+
+/* OCR Results */
+.ocr-right{display:flex;flex-direction:column;gap:1rem}
+.ocr-results-header{display:flex;justify-content:space-between;align-items:center}
+.ocr-results-title{font-size:13px;font-weight:500;color:var(--ink)}
+.ocr-results-badge{font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:8px}
+.rb-idle{background:var(--paper2);color:var(--ink3)}
+.rb-ok{background:var(--g5);color:var(--g1);border:1px solid var(--g4)}
+.rb-err{background:#fff0f0;color:#c53030;border:1px solid #ffc5c5}
+.ocr-raw{background:var(--paper2);border-radius:var(--rs);padding:1rem;font-family:var(--font-mono);font-size:12px;color:var(--ink2);min-height:120px;max-height:160px;overflow-y:auto;line-height:1.6;white-space:pre-wrap;border:1px solid var(--paper3)}
+.ocr-txns{display:flex;flex-direction:column;gap:6px}
+.ocr-txn{background:var(--paper2);border-radius:var(--rs);padding:10px 12px;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--paper3)}
+.txn-l{display:flex;flex-direction:column;gap:1px}
+.txn-merchant{font-size:13px;font-weight:500;color:var(--ink)}
+.txn-date{font-size:11px;color:var(--ink3);font-family:var(--font-mono)}
+.txn-r{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.txn-amount{font-family:var(--font-mono);font-size:14px;font-weight:500;color:var(--ink)}
+.txn-cat{font-size:10px;font-family:var(--font-mono);padding:2px 7px;border-radius:8px}
+.cat-food{background:var(--g5);color:var(--g1)}.cat-transport{background:var(--b5);color:var(--b1)}
+.cat-entertainment{background:var(--v5);color:var(--v1)}.cat-health{background:#f0e6ff;color:#4a1580}
+.cat-shopping{background:var(--a5);color:var(--a1)}.cat-utility{background:var(--paper3);color:var(--ink2)}
+.ocr-empty{text-align:center;padding:2.5rem 1rem;color:var(--ink3);font-size:13px}
+.ocr-empty-ico{font-size:32px;margin-bottom:.5rem;opacity:.4}
+
+/* METHOD, DASHBOARD, ACCURACY, FEATURES — same as before */
+.method-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem}
+.mc{background:var(--white);border:1px solid var(--paper3);border-radius:var(--r);padding:1.5rem;position:relative;overflow:hidden}
+.mc-accent{position:absolute;top:0;left:0;right:0;height:2.5px}
+.mc-a1 .mc-accent{background:var(--g2)}.mc-a2 .mc-accent{background:var(--b3)}.mc-a3 .mc-accent{background:var(--a2)}
+.mc-step{font-family:var(--font-mono);font-size:10px;color:var(--ink4);margin-bottom:.75rem}
+.mc-title{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:.5rem}
+.mc-body{font-size:13px;color:var(--ink2);line-height:1.65;margin-bottom:1.1rem}
+.mc-tags{display:flex;gap:5px;flex-wrap:wrap}
+.mc-tag{font-size:10px;font-family:var(--font-mono);padding:2px 8px;border-radius:8px;background:var(--paper2);color:var(--ink3)}
+.dash-shell{background:var(--paper2);border:1px solid var(--paper3);border-radius:16px;padding:1.25rem}
+.dash-grid{display:grid;grid-template-columns:3fr 2fr;gap:1rem}
+.dc{background:var(--white);border:1px solid var(--paper3);border-radius:var(--r);padding:1rem}
+.dc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem}
+.dc-title{font-size:12px;font-weight:500;color:var(--ink2)}
+.dc-action{font-size:11px;color:var(--g2);font-family:var(--font-mono);cursor:pointer}
+.chart-box{height:160px;position:relative}
+.legend{display:flex;gap:12px;margin-top:8px}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink3)}
+.leg-line{width:14px;height:2.5px;border-radius:2px}
+.cat-list{display:flex;flex-direction:column}
+.cat-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--paper2)}
+.cat-row:last-child{border-bottom:none}
+.cat-l{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink)}
+.cat-dot{width:7px;height:7px;border-radius:50%}
+.cat-r{text-align:right}
+.cat-amt{font-family:var(--font-mono);font-size:13px;font-weight:500;color:var(--ink)}
+.cat-pct{font-size:11px;color:var(--ink4)}
+.forecast-rows{display:flex;flex-direction:column;gap:7px}
+.fb-row{display:flex;align-items:center;gap:8px}
+.fb-mo{font-family:var(--font-mono);font-size:11px;color:var(--ink3);width:26px}
+.fb-track{flex:1;height:7px;background:var(--paper2);border-radius:4px;overflow:hidden}
+.fb-act{height:100%;border-radius:4px;background:var(--g2)}
+.fb-fct{height:100%;border-radius:4px;background:repeating-linear-gradient(90deg,var(--b3) 0,var(--b3) 4px,transparent 4px,transparent 8px);opacity:.75}
+.fb-val{font-family:var(--font-mono);font-size:11px;color:var(--ink2);width:48px;text-align:right}
+.trend-badge{margin-top:10px;background:var(--g5);border:1px solid var(--g4);border-radius:var(--rs);padding:8px 12px;font-size:12px;color:var(--g1)}
+.insight-list{display:flex;flex-direction:column;gap:7px}
+.insight{background:var(--paper2);border-radius:var(--rs);padding:9px 11px;display:flex;gap:9px;align-items:flex-start}
+.ins-ico{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ins-ico svg{width:12px;height:12px}
+.ii-g{background:#d4f2e4}.ii-o{background:var(--a5)}.ii-b{background:var(--b5)}
+.ins-text{font-size:12px;color:var(--ink2);line-height:1.5}
+.ins-text b{color:var(--ink);font-weight:500}
+.acc-bg{background:var(--white);border-top:1px solid var(--paper3);border-bottom:1px solid var(--paper3)}
+.acc-inner{max-width:1160px;margin:0 auto;padding:4.5rem 2rem}
+.acc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2rem}
+.acc-card{background:var(--paper2);border-radius:var(--r);padding:1.5rem;text-align:center}
+.acc-num{font-family:var(--font-mono);font-size:30px;font-weight:500;color:var(--ink);margin-bottom:4px}
+.acc-num span{font-size:18px;color:var(--g2)}
+.acc-label{font-size:12px;color:var(--ink3)}
+.pipeline{display:flex;background:var(--paper2);border-radius:var(--r);overflow:hidden;border:1px solid var(--paper3)}
+.pipe-step{flex:1;padding:1.1rem 1rem;border-right:1px solid var(--paper3);position:relative}
+.pipe-step:last-child{border-right:none}
+.ps-n{font-family:var(--font-mono);font-size:10px;color:var(--ink4);margin-bottom:3px}
+.ps-t{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:3px}
+.ps-d{font-size:11px;color:var(--ink3)}
+.pipe-arrow{position:absolute;right:-7px;top:50%;transform:translateY(-50%);width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:7px solid var(--paper3);z-index:1}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.25rem}
+.feat{background:var(--white);border:1px solid var(--paper3);border-radius:var(--r);padding:1.5rem}
+.feat-ico{width:38px;height:38px;border-radius:9px;background:var(--paper2);display:flex;align-items:center;justify-content:center;margin-bottom:1rem}
+.feat-ico svg{width:18px;height:18px;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.feat-t{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:.4rem}
+.feat-d{font-size:13px;color:var(--ink2);line-height:1.65}
+.cta-band{background:var(--g1);margin:0 2rem 4rem;border-radius:16px;padding:3.5rem 3rem;display:flex;justify-content:space-between;align-items:center;gap:2rem;max-width:1120px;margin-left:auto;margin-right:auto}
+.cta-eyebrow{font-size:11px;font-family:var(--font-mono);color:var(--g4);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.5rem}
+.cta-title{font-family:var(--font-serif);font-size:32px;color:#fff;line-height:1.2}
+.cta-sub{font-size:14px;color:var(--g4);margin-top:.5rem}
+.btn-white{background:#fff;color:var(--g1);font-size:14px;font-weight:600;padding:12px 28px;border-radius:24px;border:none;cursor:pointer;font-family:var(--font-body);transition:opacity .15s;flex-shrink:0}
+.btn-white:hover{opacity:.9}
+footer{background:var(--ink);color:var(--ink4);padding:3.5rem 2rem 2rem}
+.footer-inner{max-width:1160px;margin:0 auto}
+.footer-top{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:3rem;padding-bottom:2.5rem;border-bottom:1px solid #2a2a28}
+.ft-desc{font-size:13px;color:var(--ink3);line-height:1.7;margin-top:.75rem;max-width:220px}
+.ft-social{display:flex;gap:8px;margin-top:1rem}
+.soc-btn{width:32px;height:32px;border-radius:50%;border:1px solid #333;display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:12px;cursor:pointer;transition:border-color .15s,color .15s}
+.soc-btn:hover{border-color:var(--ink4);color:#fff}
+.ft-col h4{font-size:12px;font-weight:600;color:#fff;margin-bottom:1rem;letter-spacing:.03em}
+.ft-col ul{list-style:none;display:flex;flex-direction:column;gap:.6rem}
+.ft-col li a{font-size:13px;color:var(--ink3);transition:color .15s}
+.ft-col li a:hover{color:#fff}
+.footer-bottom{padding-top:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem}
+.fb-copy{font-size:12px;color:var(--ink3);font-family:var(--font-mono)}
+.fb-legal{display:flex;gap:1.5rem}
+.fb-legal a{font-size:12px;color:var(--ink3)}
+.fb-legal a:hover{color:#fff}
+.status-badge{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink3)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:#3dab7e}
+
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr;gap:3rem}.hero-right{display:none}
+  .method-grid,.feat-grid{grid-template-columns:1fr 1fr}
+  .acc-grid{grid-template-columns:1fr 1fr}
+  .dash-grid{grid-template-columns:1fr}
+  .footer-top{grid-template-columns:1fr 1fr;gap:2rem}
+  .cta-band{flex-direction:column;text-align:center}
+  .ocr-grid{grid-template-columns:1fr}
+  h1{font-size:38px}.s-title{font-size:30px}
+  .nav-links{display:none}
+  .pipeline{flex-direction:column}
+  .pipe-arrow{display:none}
+}
+@media(max-width:540px){
+  .method-grid,.feat-grid{grid-template-columns:1fr}
+  .acc-grid{grid-template-columns:1fr 1fr}
+  .footer-top{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="topbar">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M2 20l5-5m5-5l5-5M7 15l5-5 5-5"/></svg></div>
+      <div><span class="logo-name">FinSight AI</span><span class="logo-tag">behavior engine</span></div>
+    </a>
+    <nav class="nav-links">
+      <a href="#" onclick="scrollToSection('methodology'); return false;">Methodology</a><a href="#" onclick="scrollToSection('ocr-scanner'); return false;">OCR Scanner</a><a href="#" onclick="scrollToSection('dashboard'); return false;">Dashboard</a>
+      <a href="#" onclick="scrollToSection('accuracy'); return false;">Accuracy</a><a href="#" onclick="scrollToSection('features'); return false;">Features</a><a href="#" onclick="scrollToSection('pricing'); return false;">Pricing</a>
+    </nav>
+    <div class="nav-right">
+      <button class="btn-outline" id="signInBtn">Sign in</button>
+      <button class="btn-solid" id="getStartedBtn">Get started</button>
+    </div>
+  </div>
+</header>
+
+<main>
+<!-- HERO -->
+<section class="hero">
+  <div>
+    <h1>Personal finance that <em>learns</em> your behavior</h1>
+    <p class="hero-sub">Scan receipts with AI, classify transactions automatically, forecast expenses, and get interpretable budget recommendations — powered by ML. Fully open source, free API, no vendor lock-in.</p>
+    <div class="hero-actions">
+      <button class="btn-lg">Explore Dashboard</button>
+      <button class="btn-lg-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        Watch demo
+      </button>
+    </div>
+    <div class="hero-kpis">
+      <div><div class="kpi-val">96.4%</div><div class="kpi-label">Accuracy</div></div>
+      <div><div class="kpi-val">±4.2%</div><div class="kpi-label">Prediction confidence</div></div>
+      <div><div class="kpi-val">12ms</div><div class="kpi-label">Response speed</div></div>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="h-float hf1"><div class="hf-label">Savings rate</div><div class="hf-val hf-green">+18.3% above target</div></div>
+    <div class="h-card">
+      <div class="hc-top"><div><div class="hc-t1">Spending overview — April 2026</div><div class="hc-t2">214 transactions classified</div></div><span class="hc-badge">ML classified</span></div>
+      <div class="hc-amt">$3,847</div>
+      <div class="bar-list">
+        <div class="bar-row"><span class="bar-name">Housing</span><div class="bar-track"><div class="bar-fill" style="width:52%;background:var(--g1)"></div></div><span class="bar-amt">$1,240</span></div>
+        <div class="bar-row"><span class="bar-name">Food & Dining</span><div class="bar-track"><div class="bar-fill" style="width:28%;background:var(--g3)"></div></div><span class="bar-amt">$687</span></div>
+        <div class="bar-row"><span class="bar-name">Transport</span><div class="bar-track"><div class="bar-fill" style="width:16%;background:var(--b3)"></div></div><span class="bar-amt">$312</span></div>
+        <div class="bar-row"><span class="bar-name">Entertainment</span><div class="bar-track"><div class="bar-fill" style="width:10%;background:var(--a2)"></div></div><span class="bar-amt">$198</span></div>
+      </div>
+      <div class="pill-row"><span class="pill on">Classified</span><span class="pill">Forecasted</span><span class="pill">2 anomalies</span></div>
+    </div>
+    <div class="h-float hf2"><div class="hf-label">Next month forecast</div><div class="hf-val hf-orange">$4,120 · +7.1%</div></div>
+  </div>
+</section>
+
+<!-- OCR SECTION -->
+<div class="section" id="ocr-scanner">
+  <div class="s-eyebrow">Receipt Scanner</div>
+  <div class="s-title">Scan any receipt instantly</div>
+  <p class="s-desc">Upload a photo of any receipt or bank statement. Our AI engine extracts transactions and automatically classifies each one - no manual entry needed.</p>
+  <div class="ocr-wrap">
+    <div class="ocr-grid">
+      <div class="ocr-left">
+        <div class="ocr-drop" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*,.pdf">
+          <div class="ocr-drop-icon">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          </div>
+          <div class="ocr-drop-title">Drop receipt image here</div>
+          <div class="ocr-drop-sub">PNG, JPG, WEBP · or click to browse</div>
+        </div>
+        <div class="ocr-preview" id="previewWrap">
+          <img id="previewImg" src="" alt="Receipt preview">
+          <div class="ocr-preview-name" id="previewName"></div>
+        </div>
+        <div class="ocr-toast" id="toastBox">
+          <span class="toast-ico" id="toastIco"></span>
+          <div class="toast-msg" id="toastMsg"></div>
+        </div>
+        <button class="ocr-btn" id="scanBtn" disabled>
+          <span id="btnLabel">Select an image first</span>
+          <span class="ocr-spinner" id="spinner"></span>
+        </button>
+      </div>
+      <div class="ocr-right">
+        <div class="ocr-results-header">
+          <span class="ocr-results-title">Extracted transactions</span>
+          <span class="ocr-results-badge rb-idle" id="resultsBadge">Awaiting scan</span>
+        </div>
+        <div class="ocr-raw" id="rawText">Receipt text will appear here after scanning…</div>
+        <div class="ocr-txns" id="txnList">
+          <div class="ocr-empty"><div class="ocr-empty-ico">🧾</div>No transactions extracted yet.<br>Upload a receipt to get started.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- METHODOLOGY -->
+<div class="section" id="methodology">
+  <div class="s-eyebrow">How it works</div>
+  <div class="s-title">Three-layer intelligence</div>
+  <p class="s-desc">Each layer is a distinct ML pipeline — classification, forecasting, and recommendation — working in concert to model your unique financial behavior.</p>
+  <div class="method-grid">
+    <div class="mc mc-a1"><div class="mc-accent"></div><div class="mc-step">01 · CLASSIFY</div><div class="mc-title">Transaction Classification</div><div class="mc-body">We sort your transactions into clear spending categories using details like store name, amount, and date. You can personalize categories to match how you manage money.</div></div>
+    <div class="mc mc-a2"><div class="mc-accent"></div><div class="mc-step">02 · FORECAST</div><div class="mc-title">Time-Series Forecasting</div><div class="mc-body">We estimate your upcoming spending based on your past habits and monthly patterns, with a 90-day outlook to help you plan ahead.</div></div>
+    <div class="mc mc-a3"><div class="mc-accent"></div><div class="mc-step">03 · ADVISE</div><div class="mc-title">Interpretable Recommendations</div><div class="mc-body">You get practical suggestions that explain what to change and why, including simple "what if" scenarios to see potential savings.</div></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="section" id="dashboard" style="padding-top:0">
+  <div class="s-eyebrow">Live Dashboard</div>
+  <div class="s-title">Your financial brain</div>
+  <p class="s-desc">Real-time classification, 90-day forecasts, and explainable budget guidance — all in one unified view.</p>
+  <div class="dash-shell">
+    <div class="dash-grid">
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="dc" id="forecast">
+          <div class="dc-head"><span class="dc-title">Monthly spending · 6-month history + 90-day forecast</span><span class="dc-action">Export CSV</span></div>
+          <div class="chart-box"><canvas id="spendChart"></canvas></div>
+          <div class="legend"><div class="leg-item"><span class="leg-line" style="background:var(--g2)"></span>Actual</div><div class="leg-item"><span class="leg-line" style="background:var(--b3)"></span>Forecast</div></div>
+        </div>
+        <div class="dc" id="insights">
+          <div class="dc-head"><span class="dc-title">Classified categories this month</span><span class="dc-action">View all</span></div>
+          <div class="cat-list">
+            <div class="cat-row"><div class="cat-l"><div class="cat-dot" style="background:var(--g1)"></div>Housing & Utilities</div><div class="cat-r"><div class="cat-amt">$1,240</div><div class="cat-pct">32.2%</div></div></div>
+            <div class="cat-row"><div class="cat-l"><div class="cat-dot" style="background:var(--g3)"></div>Food & Dining</div><div class="cat-r"><div class="cat-amt">$687</div><div class="cat-pct">17.9%</div></div></div>
+            <div class="cat-row"><div class="cat-l"><div class="cat-dot" style="background:var(--b3)"></div>Transport</div><div class="cat-r"><div class="cat-amt">$312</div><div class="cat-pct">8.1%</div></div></div>
+            <div class="cat-row"><div class="cat-l"><div class="cat-dot" style="background:var(--a2)"></div>Entertainment</div><div class="cat-r"><div class="cat-amt">$198</div><div class="cat-pct">5.2%</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem">
+        <div class="dc">
+          <div class="dc-head"><span class="dc-title">90-day expense forecast</span></div>
+          <div class="forecast-rows">
+            <div class="fb-row"><span class="fb-mo">May</span><div class="fb-track"><div class="fb-act" style="width:88%"></div></div><span class="fb-val">$4,120</span></div>
+            <div class="fb-row"><span class="fb-mo">Jun</span><div class="fb-track"><div class="fb-fct" style="width:82%"></div></div><span class="fb-val">$3,890</span></div>
+            <div class="fb-row"><span class="fb-mo">Jul</span><div class="fb-track"><div class="fb-fct" style="width:79%"></div></div><span class="fb-val">$3,740</span></div>
+          </div>
+          <div class="trend-badge">Downward trend · −6.3% over 90 days</div>
+        </div>
+        <div class="dc">
+          <div class="dc-head"><span class="dc-title">AI insights</span></div>
+          <div class="insight-list">
+            <div class="insight"><div class="ins-ico ii-g"><svg viewBox="0 0 24 24" stroke="var(--g2)"><path d="M20 6L9 17l-5-5"/></svg></div><div class="ins-text"><b>Dining down 12%</b> vs 3-month average — sustaining saves $82/mo.</div></div>
+            <div class="insight"><div class="ins-ico ii-o"><svg viewBox="0 0 24 24" stroke="var(--a2)"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div><div class="ins-text"><b>Subscription creep:</b> 3 new recurring charges totaling $47/mo.</div></div>
+            <div class="insight"><div class="ins-ico ii-b"><svg viewBox="0 0 24 24" stroke="var(--b2)"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div><div class="ins-text"><b>Forecast confidence:</b> May estimate from 18-month pattern. CI ±$310.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ACCURACY -->
+<div class="acc-bg" id="accuracy">
+  <div class="acc-inner">
+    <div class="s-eyebrow">Model performance</div>
+    <div class="s-title">Benchmark accuracy</div>
+    <p class="s-desc">Evaluated on 120k labeled transactions across 5,000 synthetic user profiles. Holdout test set, zero data leakage.</p>
+    <div class="acc-grid">
+      <div class="acc-card"><div class="acc-num">96.4<span>%</span></div><div class="acc-label">Accuracy</div></div>
+      <div class="acc-card"><div class="acc-num">±4.2<span>%</span></div><div class="acc-label">Forecast precision</div></div>
+      <div class="acc-card"><div class="acc-num">88.7<span>%</span></div><div class="acc-label">Users accept advice</div></div>
+      <div class="acc-card"><div class="acc-num">2.1<span>×</span></div><div class="acc-label">Extra savings</div></div>
+    </div>
+    <div class="pipeline">
+      <div class="pipe-step"><div class="pipe-arrow"></div><div class="ps-n">01</div><div class="ps-t">Add your transactions</div><div class="ps-d">Upload or connect bank</div></div>
+      <div class="pipe-step"><div class="pipe-arrow"></div><div class="ps-n">02</div><div class="ps-t">AI learns patterns</div><div class="ps-d">Analyzes your spending</div></div>
+      <div class="pipe-step"><div class="pipe-arrow"></div><div class="ps-n">03</div><div class="ps-t">Categorizes spending</div><div class="ps-d">Smart sorting</div></div>
+      <div class="pipe-step"><div class="pipe-arrow"></div><div class="ps-n">04</div><div class="ps-t">Predicts future</div><div class="ps-d">Rolling 90-day forecast</div></div>
+      <div class="pipe-step"><div class="ps-n">05</div><div class="ps-t">Gives advice</div><div class="ps-d">Clear, actionable tips</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<div class="section" id="features">
+  <div class="s-eyebrow">Capabilities</div>
+  <div class="s-title">Everything your advisor needs</div>
+  <p class="s-desc">Seven production-grade capabilities working together as a unified financial intelligence layer.</p>
+  <div class="feat-grid">
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--g1)"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h.01M9 15h.01M15 9h.01M15 15h.01M12 12h.01"/></svg></div><div class="feat-t">Receipt OCR</div><div class="feat-d">Take a photo of any receipt. Our AI reads it and adds the transaction automatically — no typing needed.</div></div>
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--g1)"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div><div class="feat-t">Smart classification</div><div class="feat-d">Every purchase is sorted into clear spending categories. You can customize categories to match how you think about money.</div></div>
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--b2)"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="feat-t">Behavioral forecasting</div><div class="feat-d">See what you'll likely spend in the next 90 days, based on your actual habits — not generic averages.</div></div>
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--v2)"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg></div><div class="feat-t">Anomaly detection</div><div class="feat-d">We flag forgotten subscriptions, duplicate charges, or unexpected spikes before they become problems.</div></div>
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--a2)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><div class="feat-t">Clear Explanations</div><div class="feat-d">Every recommendation comes with a simple reason why. No black boxes — just honest advice.</div></div>
+    <div class="feat"><div class="feat-ico"><svg viewBox="0 0 24 24" stroke="var(--g2)"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div><div class="feat-t">What-If Scenarios</div><div class="feat-d">Try 'what if' scenarios like cutting dining out by 15%. See exactly how much you could save.</div></div>
+  </div>
+</div>
+
+<!-- CTA -->
+<div class="cta-band" id="pricing">
+  <div>
+    <div class="cta-eyebrow">Get started today</div>
+    <div class="cta-title">Start understanding your money</div>
+    <div class="cta-sub">Free for the first 90 days. No credit card required.</div>
+  </div>
+  <button class="btn-white">Create free account →</button>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="nav-logo" style="margin-bottom:.75rem">
+          <div class="logo-mark" style="background:#1f5c48"><svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round"><path d="M2 20l5-5m5-5l5-5M7 15l5-5 5-5"/></svg></div>
+          <div><span class="logo-name">FinSight AI</span><span class="logo-tag">behavior engine</span></div>
+        </div>
+        <p class="ft-desc">ML-powered personal finance that learns your behavior and gives interpretable, actionable guidance.</p>
+        <div class="ft-social"><div class="soc-btn">X</div><div class="soc-btn">in</div><div class="soc-btn">gh</div></div>
+      </div>
+      <div class="ft-col"><h4>Product</h4><ul><li><a href="#" onclick="scrollToSection('dashboard'); return false;">Dashboard</a></li><li><a href="#" onclick="scrollToSection('ocr-scanner'); return false;">OCR Scanner</a></li><li><a href="#" onclick="scrollToSection('forecast'); return false;">Forecasting</a></li><li><a href="#" onclick="scrollToSection('insights'); return false;">Insights</a></li><li><a href="#" onclick="scrollToSection('pricing'); return false;">Pricing</a></li></ul></div>
+      <div class="ft-col"><h4>Developers</h4><ul><li><a href="#">API Docs</a></li><li><a href="#">GitHub Repo</a></li><li><a href="#">Model card</a></li><li><a href="#">Research paper</a></li><li><a href="#">Changelog</a></li></ul></div>
+      <div class="ft-col"><h4>Company</h4><ul><li><a href="#">About</a></li><li><a href="#">Blog</a></li><li><a href="#">Careers</a></li></ul></div>
+    </div>
+    <div class="footer-bottom">
+      <span class="fb-copy">© 2026 FinSight AI, Inc.</span>
+      <div class="status-badge"><span class="status-dot"></span>All systems operational</div>
+      <div class="fb-legal"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a><a href="#">Cookies</a></div>
+    </div>
+  </div>
+</footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script>
+/* ── SPENDING CHART ── */
+try {
+  const ctx = document.getElementById('spendChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['Nov','Dec','Jan','Feb','Mar','Apr','May','Jun','Jul'],
+      datasets: [
+        { label:'Actual', data:[3620,4210,3980,3540,3710,3847,null,null,null], borderColor:'#2a7a5c', backgroundColor:'rgba(42,122,92,0.07)', borderWidth:2, tension:.35, fill:true, pointBackgroundColor:'#2a7a5c', pointRadius:3, spanGaps:false },
+        { label:'Forecast', data:[null,null,null,null,null,3847,4120,3890,3740], borderColor:'#4a82d4', backgroundColor:'rgba(74,130,212,0.05)', borderWidth:2, borderDash:[5,4], tension:.35, fill:true, pointBackgroundColor:'#4a82d4', pointRadius:3, spanGaps:false }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false} },
+      scales: {
+        x:{ grid:{color:'rgba(0,0,0,0.04)'}, ticks:{font:{size:11},color:'#8c8b84'} },
+        y:{ grid:{color:'rgba(0,0,0,0.04)'}, ticks:{font:{size:11},color:'#8c8b84',callback:v=>'$'+(v/1000).toFixed(1)+'k'}, min:3000, max:4800 }
+      }
+    }
+  });
+} catch(e) { console.warn('Chart init failed:', e); }
+
+/* ── OCR ENGINE ── */
+const dropZone   = document.getElementById('dropZone');
+const fileInput  = document.getElementById('fileInput');
+const previewWrap= document.getElementById('previewWrap');
+const previewImg = document.getElementById('previewImg');
+const previewName= document.getElementById('previewName');
+const scanBtn    = document.getElementById('scanBtn');
+const btnLabel   = document.getElementById('btnLabel');
+const spinner    = document.getElementById('spinner');
+const toastBox   = document.getElementById('toastBox');
+const toastIco   = document.getElementById('toastIco');
+const toastMsg   = document.getElementById('toastMsg');
+const rawText    = document.getElementById('rawText');
+const txnList    = document.getElementById('txnList');
+const resBadge   = document.getElementById('resultsBadge');
+
+let selectedFile = null;
+let retryCount   = 0;
+const MAX_RETRY  = 2;
+
+/* Category classifier */
+const catMap = [
+  { cat:'food',          cls:'cat-food',          label:'Food & Dining',   keys:['restaurant','cafe','pizza','burger','sushi','starbucks','mcdonald','kfc','subway','food','dining','bistro','grill','bakery','coffee','tea'] },
+  { cat:'transport',     cls:'cat-transport',      label:'Transport',       keys:['uber','lyft','taxi','petrol','fuel','gas','parking','metro','bus','train','bolt','careem','transit'] },
+  { cat:'health',        cls:'cat-health',         label:'Health',          keys:['pharmacy','medical','clinic','hospital','doctor','dentist','fitness','gym','health','medicine','drug'] },
+  { cat:'entertainment', cls:'cat-entertainment',  label:'Entertainment',   keys:['netflix','spotify','cinema','movie','theatre','games','steam','amazon prime','disney','hulu'] },
+  { cat:'shopping',      cls:'cat-shopping',       label:'Shopping',        keys:['amazon','walmart','target','ikea','zara','h&m','shop','store','mall','market','bazaar'] },
+  { cat:'utility',       cls:'cat-utility',        label:'Utility',         keys:['electric','water','internet','phone','bill','utility','telecom','gas bill'] }
+];
+
+function classifyMerchant(name) {
+  const n = name.toLowerCase();
+  for (const c of catMap) { if (c.keys.some(k => n.includes(k))) return c; }
+  return { cat:'other', cls:'cat-utility', label:'Other', keys:[] };
+}
+
+/* Toast helper */
+function showToast(type, html, showRetry=false) {
+  toastBox.className = 'ocr-toast ' + type;
+  toastIco.textContent = type==='error' ? '⚠' : type==='success' ? '✓' : 'ℹ';
+  toastMsg.innerHTML = html + (showRetry ? `<br><button class="retry-btn" onclick="retryScan()">Try again</button>` : '');
+}
+function hideToast() { toastBox.className = 'ocr-toast'; }
+
+/* File select */
+function handleFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('error', '<b>Unsupported file type.</b> Please upload a PNG, JPG, or WEBP image.');
+    return;
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    showToast('error', '<b>File too large.</b> Please upload an image under 12 MB.');
+    return;
+  }
+  selectedFile = file;
+  retryCount = 0;
+  hideToast();
+  const url = URL.createObjectURL(file);
+  previewImg.src = url;
+  previewName.textContent = file.name + ' · ' + (file.size/1024).toFixed(0) + ' KB';
+  previewWrap.style.display = 'block';
+  dropZone.style.display = 'none';
+  scanBtn.disabled = false;
+  btnLabel.textContent = 'Scan receipt';
+  resBadge.className = 'ocr-results-badge rb-idle';
+  resBadge.textContent = 'Ready to scan';
+  rawText.textContent = 'Raw OCR text will appear here after scanning…';
+  txnList.innerHTML = '<div class="ocr-empty"><div class="ocr-empty-ico">🧾</div>Click "Scan receipt" to extract transactions.</div>';
+}
+
+fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); });
+
+/* Reset to upload new */
+previewWrap.addEventListener('click', () => {
+  previewWrap.style.display = 'none';
+  dropZone.style.display = 'block';
+  selectedFile = null;
+  scanBtn.disabled = true;
+  btnLabel.textContent = 'Select an image first';
+  hideToast();
+  resBadge.className = 'ocr-results-badge rb-idle';
+  resBadge.textContent = 'Awaiting scan';
+  rawText.textContent = 'Raw OCR text will appear here after scanning…';
+  txnList.innerHTML = '<div class="ocr-empty"><div class="ocr-empty-ico">🧾</div>No transactions extracted yet.<br>Upload a receipt to get started.</div>';
+});
+
+function retryScan() { if (retryCount < MAX_RETRY) { retryCount++; runOCR(); } else { showToast('error','<b>Max retries reached.</b> The image may be too low quality or contain no readable text.'); } }
+
+/* OCR runner */
+async function runOCR() {
+  if (!selectedFile) return;
+  scanBtn.disabled = true;
+  btnLabel.textContent = 'Scanning…';
+  spinner.style.display = 'inline-block';
+  hideToast();
+  resBadge.className = 'ocr-results-badge rb-idle';
+  resBadge.textContent = 'Processing…';
+  rawText.textContent = 'Running OCR engine…';
+  txnList.innerHTML = '<div class="ocr-empty"><div class="ocr-empty-ico" style="animation:spin .8s linear infinite;display:inline-block">⟳</div><br>Extracting text…</div>';
+
+  try {
+    if (typeof Tesseract === 'undefined') throw new Error('OCR_UNAVAILABLE');
+    const { data: { text, confidence } } = await Tesseract.recognize(selectedFile, 'eng', {
+      logger: m => { if (m.status === 'recognizing text') btnLabel.textContent = 'Scanning… ' + Math.round(m.progress * 100) + '%'; }
+    });
+
+    if (!text || text.trim().length < 10) throw new Error('OCR_EMPTY');
+    if (confidence < 20) throw new Error('OCR_LOW_CONFIDENCE');
+
+    rawText.textContent = text.trim();
+    const txns = parseTransactions(text);
+
+    if (txns.length === 0) {
+      showToast('info', '<b>No transactions detected.</b> The receipt was scanned but no price patterns were found. Try a clearer image.', true);
+      resBadge.className = 'ocr-results-badge rb-err';
+      resBadge.textContent = '0 found';
+      txnList.innerHTML = '<div class="ocr-empty"><div class="ocr-empty-ico">🔍</div>No transactions found.<br>Try a clearer photo.</div>';
+    } else {
+      showToast('success', `<b>${txns.length} transaction${txns.length>1?'s':''} extracted</b> with ${Math.round(confidence)}% OCR confidence.`);
+      resBadge.className = 'ocr-results-badge rb-ok';
+      resBadge.textContent = txns.length + ' extracted';
+      renderTxns(txns);
+    }
+  } catch(err) {
+    handleOCRError(err);
+  } finally {
+    scanBtn.disabled = false;
+    btnLabel.textContent = 'Scan again';
+    spinner.style.display = 'none';
+  }
+}
+
+/* Error handler with specific messages */
+function handleOCRError(err) {
+  resBadge.className = 'ocr-results-badge rb-err';
+  resBadge.textContent = 'Error';
+  txnList.innerHTML = '<div class="ocr-empty"><div class="ocr-empty-ico">❌</div>Scan failed. See error below.</div>';
+  rawText.textContent = 'Error: ' + (err.message || 'Unknown error');
+
+  const canRetry = retryCount < MAX_RETRY;
+
+  if (err.message === 'OCR_UNAVAILABLE') {
+    showToast('error', '<b>OCR engine unavailable.</b> The Tesseract library could not be loaded. Check your connection.', canRetry);
+  } else if (err.message === 'OCR_EMPTY') {
+    showToast('error', '<b>No text detected.</b> The image may be too blurry, dark, or low-resolution. Try a well-lit photo.', canRetry);
+  } else if (err.message === 'OCR_LOW_CONFIDENCE') {
+    showToast('error', '<b>Low confidence result.</b> OCR couldn\'t read the image clearly. Please try a higher quality photo.', canRetry);
+  } else if (err.name === 'NetworkError' || err.message.includes('fetch') || err.message.includes('network')) {
+    showToast('error', '<b>Network error.</b> Could not load the OCR engine. Please check your internet connection.', canRetry);
+  } else if (err.message.includes('memory') || err.message.includes('Memory')) {
+    showToast('error', '<b>Out of memory.</b> The image is too large to process. Please try a smaller file.', false);
+  } else {
+    showToast('error', `<b>Unexpected error:</b> ${err.message || 'Something went wrong.'}`, canRetry);
+    console.error('[OCR Error]', err);
+  }
+}
+
+/* Transaction parser — finds lines with a price */
+function parseTransactions(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const priceRx = /\$?\d{1,4}[.,]\d{2}/;
+  const dateRx  = /\b(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\b/;
+  const txns = [];
+  for (const line of lines) {
+    const pMatch = line.match(priceRx);
+    if (!pMatch) continue;
+    const raw = pMatch[0].replace(/[,$]/g,'');
+    const amount = parseFloat(raw.replace(',','.'));
+    if (isNaN(amount) || amount < 0.5 || amount > 9999) continue;
+    const dMatch = line.match(dateRx);
+    const merchant = line.replace(priceRx,'').replace(dateRx,'').replace(/[^a-zA-Z0-9& ]/g,' ').replace(/\s+/g,' ').trim();
+    if (!merchant || merchant.length < 2) continue;
+    const cat = classifyMerchant(merchant);
+    txns.push({ merchant: merchant.slice(0,40), amount, date: dMatch ? dMatch[1] : 'Today', cat });
+  }
+  return txns;
+}
+
+/* Render transaction cards */
+function renderTxns(txns) {
+  txnList.innerHTML = '';
+  for (const t of txns) {
+    const div = document.createElement('div');
+    div.className = 'ocr-txn';
+    div.innerHTML = `
+      <div class="txn-l">
+        <div class="txn-merchant">${t.merchant}</div>
+        <div class="txn-date">${t.date}</div>
+      </div>
+      <div class="txn-r">
+        <div class="txn-amount">$${t.amount.toFixed(2)}</div>
+        <span class="txn-cat ${t.cat.cls}">${t.cat.label}</span>
+      </div>`;
+    txnList.appendChild(div);
+  }
+}
+
+scanBtn.addEventListener('click', runOCR);
+
+function scrollToSection(id) {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+}
+
+const signInBtn = document.getElementById('signInBtn');
+const getStartedBtn = document.getElementById('getStartedBtn');
+
+if (signInBtn) {
+  signInBtn.addEventListener('click', function () {
+    alert('Sign in modal coming soon');
+  });
+}
+
+if (getStartedBtn) {
+  getStartedBtn.addEventListener('click', function () {
+    alert('Signup modal coming soon');
+  });
+}
+
+(function setupDeveloperFooterLinks() {
+  const linkActions = {
+    'API Docs': function () {
+      window.open('https://fin-advisor-sa6h.onrender.com/docs', '_blank', 'noopener');
+    },
+    'GitHub Repo': function () {
+      window.open('https://github.com/kamil195/ml-fin-advisor', '_blank', 'noopener');
+    },
+    'Model card': function () {
+      alert('Model card coming soon');
+    },
+    'Research paper': function () {
+      alert('Research paper coming soon');
+    },
+    'Changelog': function () {
+      alert('v1.0.0 - Initial release with ML classification');
+    }
+  };
+
+  const footerColumns = Array.from(document.querySelectorAll('.ft-col'));
+  const developersColumn = footerColumns.find(function (col) {
+    const header = col.querySelector('h4');
+    return header && header.textContent.trim() === 'Developers';
+  });
+
+  if (!developersColumn) return;
+
+  const links = developersColumn.querySelectorAll('a');
+  links.forEach(function (link) {
+    const label = link.textContent.trim();
+    const action = linkActions[label];
+    if (!action) return;
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      action();
+    });
+  });
+})();
+</script>
+</body>
+</html>
