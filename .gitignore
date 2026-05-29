@@ -60,3 +60,29 @@ mlflow.db
 # Google Cloud SDK temp
 _docker_check.txt
 _docker_log.txt
+
+# Secrets and local envs
+.env.production
+secrets.toml
+.streamlit/secrets.toml
+
+# Any file containing these substrings in their filename
+*secret*
+*key*
+
+# Streamlit / demo files
+/.streamlit/
+Dockerfile.streamlit
+streamlit_app.py
+dashboard.py
+consumer_app.py
+debug_forecast.py
+check_mflow.py
+requirements-streamlit.txt
+customer-validation/
+.nojekyll
+
+# Local configs and logs
+.vscode/
+.idea/
+*.log
