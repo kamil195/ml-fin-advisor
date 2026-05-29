@@ -86,3 +86,6 @@ customer-validation/
 .vscode/
 .idea/
 *.log
+
+# Local frontend folder
+frontend/
