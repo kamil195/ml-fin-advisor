@@ -53,6 +53,13 @@
         <section id="transactions" class="page">
           <h2>Transactions</h2>
           <label>Transaction text:</label>
+          <div style="margin:8px 0">
+            <button class="btn-sample" data-sample="Netflix subscription at NETFLIX">NETFLIX</button>
+            <button class="btn-sample" data-sample="Fuel purchase at SHELL">SHELL</button>
+            <button class="btn-sample" data-sample="Grocery at WHOLE FOODS">WHOLE FOODS</button>
+            <button class="btn-sample" data-sample="Ride with UBER">UBER</button>
+            <button class="btn-sample" data-sample="Online purchase at AMAZON">AMAZON</button>
+          </div>
           <textarea id="txn-text" rows="4" style="width:100%"></textarea>
           <div>
             <button id="txn-classify">Classify</button>
@@ -65,6 +72,13 @@
           <label>User ID: <input id="forecast-user-id" placeholder="user_id" /></label>
           <div>
             <button id="forecast-load">Load Forecast</button>
+            <label style="margin-left:8px">Range:
+              <select id="forecast-range">
+                <option value="7">Last 7 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+            </label>
             <button id="forecast-export" class="hidden">Export as CSV</button>
           </div>
           <div id="forecast-output"></div>
@@ -174,6 +188,30 @@
       }
       updateApiStatus();
 
+      // Tooltip for copy confirmation
+      function showCopiedTooltip(targetEl){
+        const tip = document.createElement('div');
+        tip.textContent = 'Copied!';
+        tip.style.position = 'fixed';
+        tip.style.padding = '6px 10px';
+        tip.style.background = '#111';
+        tip.style.color = '#fff';
+        tip.style.borderRadius = '6px';
+        tip.style.fontSize = '13px';
+        tip.style.zIndex = 9999;
+        document.body.appendChild(tip);
+        const r = targetEl.getBoundingClientRect();
+        tip.style.left = (r.left + (r.width/2) - (tip.offsetWidth/2)) + 'px';
+        tip.style.top = (r.top - 36) + 'px';
+        // reposition after render to center properly
+        requestAnimationFrame(()=>{
+          const rr = targetEl.getBoundingClientRect();
+          tip.style.left = (rr.left + (rr.width/2) - (tip.offsetWidth/2)) + 'px';
+        });
+        setTimeout(()=>{ tip.style.transition='opacity 180ms'; tip.style.opacity='0'; }, 800);
+        setTimeout(()=>tip.remove(), 1100);
+      }
+
       // Generic fetch wrapper with api key, loading and error handling
       async function apiFetch(path, opts={}){
         const headers = opts.headers || {};
@@ -208,7 +246,12 @@
         if(!userId){ showInlineMessage(section, 'Please provide a user id.', 'error'); return }
         setButtonLoading(btn, true, 'Loading forecast...');
         try{
-          const data = await apiFetch('/v1/forecast/' + encodeURIComponent(userId));
+          // include optional date range (days) if present
+          const daysEl = document.getElementById('forecast-range');
+          const days = daysEl ? daysEl.value : '';
+          let path = '/v1/forecast/' + encodeURIComponent(userId);
+          if(days) path += '?days=' + encodeURIComponent(days);
+          const data = await apiFetch(path);
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
           // store last fetched forecast for export
           window._lastForecastData = data;
@@ -321,6 +364,18 @@
       });
       document.getElementById('txn-classify').addEventListener('click', (e)=> classifyTransaction(e.currentTarget));
 
+      // sample transaction buttons: autofill transaction text
+      document.querySelectorAll('.btn-sample').forEach(b=>{
+        b.addEventListener('click', (e)=>{
+          const sample = e.currentTarget.dataset.sample || e.currentTarget.textContent || '';
+          const ta = document.getElementById('txn-text');
+          ta.value = sample;
+          // show brief inline message
+          const sec = document.getElementById('transactions');
+          showInlineMessage(sec, 'Sample transaction inserted');
+        });
+      });
+
       // Export CSV handlers
       function jsonToCsv(data){
         // handle arrays of objects or object-of-arrays/time-series
@@ -393,7 +448,8 @@
             // fallback
             const tmp = document.createElement('textarea'); tmp.value = toCopy; document.body.appendChild(tmp); tmp.select(); document.execCommand('copy'); tmp.remove();
           }
-          alert('API key copied to clipboard');
+          // show small tooltip near button instead of alert
+          showCopiedTooltip(document.getElementById('copy-api-key'));
         }catch(e){ alert('Copy failed'); }
       });
       // populate saved key if present (masked)
