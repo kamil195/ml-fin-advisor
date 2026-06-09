@@ -100,6 +100,34 @@
       function showSpinner(){spinner.classList.remove('hidden')}
       function hideSpinner(){spinner.classList.add('hidden')}
 
+      // button state helpers (preserve original text)
+      function setButtonLoading(btn, isLoading, loadingText){
+        if(!btn) return;
+        if(isLoading){
+          btn.dataset._orig = btn.innerHTML;
+          btn.disabled = true;
+          btn.innerHTML = loadingText || 'Loading...';
+        } else {
+          btn.disabled = false;
+          if(btn.dataset._orig) { btn.innerHTML = btn.dataset._orig; delete btn.dataset._orig }
+        }
+      }
+
+      // inline message helpers
+      function clearSectionMessages(sec){
+        const existing = sec.querySelectorAll('.inline-msg');
+        existing.forEach(n=>n.remove());
+      }
+      function showInlineMessage(sec, message, type='info'){
+        clearSectionMessages(sec);
+        const d = document.createElement('div');
+        d.className = 'inline-msg';
+        d.style.marginTop = '8px';
+        if(type==='error') d.className += ' alert';
+        d.textContent = message;
+        sec.insertBefore(d, sec.firstChild);
+      }
+
       function getApiKey(){return localStorage.getItem('fin_api_key')||''}
       function setApiKey(v){if(v) localStorage.setItem('fin_api_key',v); else localStorage.removeItem('fin_api_key'); updateApiStatus();}
       function updateApiStatus(){
@@ -131,42 +159,58 @@
       }
 
       // Dashboard & Forecast (both call /v1/forecast/{user_id})
-      async function loadForecastTo(elId, userId){
+      async function loadForecastTo(elId, userId, btn){
         const out = document.getElementById(elId);
         out.innerHTML = '';
-        if(!userId){ out.innerHTML = '<div class="alert">Please provide a user id.</div>'; return }
+        const section = out.closest('.page') || out.parentElement;
+        clearSectionMessages(section);
+        if(!userId){ showInlineMessage(section, 'Please provide a user id.', 'error'); return }
+        setButtonLoading(btn, true, 'Loading forecast...');
         try{
           const data = await apiFetch('/v1/forecast/' + encodeURIComponent(userId));
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
         }catch(err){
-          renderError(out, err.message || 'Failed to load forecast', ()=>loadForecastTo(elId,userId));
+          renderError(out, err.message || 'Failed to load forecast', ()=>loadForecastTo(elId,userId,btn));
+        }finally{
+          setButtonLoading(btn, false);
         }
       }
 
       // Budget
-      async function loadBudget(userId){
+      async function loadBudget(userId, btn){
         const out = document.getElementById('budget-output');
         out.innerHTML = '';
-        if(!userId){ out.innerHTML = '<div class="alert">Please provide a user id.</div>'; return }
+        const section = out.closest('.page') || out.parentElement;
+        clearSectionMessages(section);
+        if(!userId){ showInlineMessage(section, 'Please provide a user id.', 'error'); return }
+        setButtonLoading(btn, true, 'Loading budget...');
         try{
           const data = await apiFetch('/v1/budget/' + encodeURIComponent(userId));
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
         }catch(err){
-          renderError(out, err.message || 'Failed to load budget', ()=>loadBudget(userId));
+          renderError(out, err.message || 'Failed to load budget', ()=>loadBudget(userId,btn));
+        }finally{
+          setButtonLoading(btn, false);
         }
       }
 
       // Transactions / classify
-      async function classifyTransaction(){
+      async function classifyTransaction(btn){
         const out = document.getElementById('txn-output');
         out.innerHTML = '';
+        const section = out.closest('.page') || out.parentElement;
+        clearSectionMessages(section);
         const text = document.getElementById('txn-text').value || '';
-        if(!text.trim()){ out.innerHTML = '<div class="alert">Please enter transaction text.</div>'; return }
+        if(!text.trim()){ showInlineMessage(section, 'Please enter transaction text.', 'error'); return }
+        if(text.length > 2000){ showInlineMessage(section, 'Transaction text is too long (max 2000 chars).', 'error'); return }
+        setButtonLoading(btn, true, 'Classifying...');
         try{
           const data = await apiFetch('/v1/classify', {method:'POST', body: JSON.stringify({text})});
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
         }catch(err){
-          renderError(out, err.message || 'Failed to classify', classifyTransaction);
+          renderError(out, err.message || 'Failed to classify', ()=>classifyTransaction(btn));
+        }finally{
+          setButtonLoading(btn, false);
         }
       }
 
@@ -185,19 +229,19 @@
       function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
       // Wire UI buttons
-      document.getElementById('dashboard-load').addEventListener('click', ()=>{
+      document.getElementById('dashboard-load').addEventListener('click', (e)=>{
         const uid = document.getElementById('dashboard-user-id').value.trim();
-        loadForecastTo('dashboard-output', uid);
+        loadForecastTo('dashboard-output', uid, e.currentTarget);
       });
-      document.getElementById('forecast-load').addEventListener('click', ()=>{
+      document.getElementById('forecast-load').addEventListener('click', (e)=>{
         const uid = document.getElementById('forecast-user-id').value.trim();
-        loadForecastTo('forecast-output', uid);
+        loadForecastTo('forecast-output', uid, e.currentTarget);
       });
-      document.getElementById('budget-load').addEventListener('click', ()=>{
+      document.getElementById('budget-load').addEventListener('click', (e)=>{
         const uid = document.getElementById('budget-user-id').value.trim();
-        loadBudget(uid);
+        loadBudget(uid, e.currentTarget);
       });
-      document.getElementById('txn-classify').addEventListener('click', classifyTransaction);
+      document.getElementById('txn-classify').addEventListener('click', (e)=> classifyTransaction(e.currentTarget));
 
       // Settings
       document.getElementById('save-api-key').addEventListener('click', ()=>{
