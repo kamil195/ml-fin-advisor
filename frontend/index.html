@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>FinSight AI</title>
+    <style>
+      /* Minimal helper styles only for spinner and basic layout; do not change existing design elements */
+      .hidden{display:none}
+      #app{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+      nav {display:flex;gap:12px;padding:12px}
+      .page{display:none;padding:16px}
+      .page.active{display:block}
+      .spinner{position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:8px;border-radius:6px}
+      .alert{background:#fee;border:color:#a00;padding:8px;border-radius:6px;margin:8px 0}
+      button.retry{margin-left:8px}
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <nav>
+        <a href="#" data-target="dashboard">Dashboard</a>
+        <a href="#" data-target="transactions">Transactions</a>
+        <a href="#" data-target="forecast">Forecast</a>
+        <a href="#" data-target="budget">Budget</a>
+        <a href="#" data-target="settings">Settings</a>
+      </nav>
+
+      <main>
+        <section id="dashboard" class="page">
+          <h2>Dashboard</h2>
+          <label>User ID: <input id="dashboard-user-id" placeholder="user_id" /></label>
+          <div>
+            <button id="dashboard-load">Load Forecast</button>
+          </div>
+          <div id="dashboard-output"></div>
+        </section>
+
+        <section id="transactions" class="page">
+          <h2>Transactions</h2>
+          <label>Transaction text:</label>
+          <textarea id="txn-text" rows="4" style="width:100%"></textarea>
+          <div>
+            <button id="txn-classify">Classify</button>
+          </div>
+          <div id="txn-output"></div>
+        </section>
+
+        <section id="forecast" class="page">
+          <h2>Forecast</h2>
+          <label>User ID: <input id="forecast-user-id" placeholder="user_id" /></label>
+          <div>
+            <button id="forecast-load">Load Forecast</button>
+          </div>
+          <div id="forecast-output"></div>
+        </section>
+
+        <section id="budget" class="page">
+          <h2>Budget</h2>
+          <label>User ID: <input id="budget-user-id" placeholder="user_id" /></label>
+          <div>
+            <button id="budget-load">Load Budget</button>
+          </div>
+          <div id="budget-output"></div>
+        </section>
+
+        <section id="settings" class="page">
+          <h2>Settings</h2>
+          <div>
+            <label>API Key: <input id="api-key-input" type="password" style="width:60%"/></label>
+            <button id="save-api-key">Save</button>
+            <span id="api-status" style="margin-left:12px;font-weight:600"></span>
+          </div>
+        </section>
+      </main>
+
+      <div id="spinner" class="spinner hidden">Loading...</div>
+    </div>
+
+    <script>
+    (function(){
+      const BASE = 'https://fin-advisor-sa6h.onrender.com';
+
+      // simple SPA nav
+      const links = document.querySelectorAll('nav a[data-target]');
+      links.forEach(a=>a.addEventListener('click', e=>{
+        e.preventDefault();
+        showPage(a.dataset.target);
+      }));
+      function showPage(id){
+        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        const el = document.getElementById(id);
+        if(el) el.classList.add('active');
+      }
+      // default
+      showPage('dashboard');
+
+      // spinner and helpers
+      const spinner = document.getElementById('spinner');
+      function showSpinner(){spinner.classList.remove('hidden')}
+      function hideSpinner(){spinner.classList.add('hidden')}
+
+      function getApiKey(){return localStorage.getItem('fin_api_key')||''}
+      function setApiKey(v){if(v) localStorage.setItem('fin_api_key',v); else localStorage.removeItem('fin_api_key'); updateApiStatus();}
+      function updateApiStatus(){
+        const status = document.getElementById('api-status');
+        const key = getApiKey();
+        status.textContent = key ? 'Connected' : 'Not connected';
+      }
+      updateApiStatus();
+
+      // Generic fetch wrapper with api key, loading and error handling
+      async function apiFetch(path, opts={}){
+        const headers = opts.headers || {};
+        const key = getApiKey();
+        if(key) headers['X-API-Key'] = key;
+        opts.headers = Object.assign({'Content-Type':'application/json'}, headers);
+        showSpinner();
+        try{
+          const res = await fetch(BASE + path, opts);
+          if(!res.ok){
+            const text = await res.text().catch(()=>res.statusText);
+            const err = new Error(text || res.statusText || 'API error');
+            err.status = res.status;
+            throw err;
+          }
+          const ct = res.headers.get('content-type')||'';
+          if(ct.includes('application/json')) return await res.json();
+          return await res.text();
+        }finally{hideSpinner()}
+      }
+
+      // Dashboard & Forecast (both call /v1/forecast/{user_id})
+      async function loadForecastTo(elId, userId){
+        const out = document.getElementById(elId);
+        out.innerHTML = '';
+        if(!userId){ out.innerHTML = '<div class="alert">Please provide a user id.</div>'; return }
+        try{
+          const data = await apiFetch('/v1/forecast/' + encodeURIComponent(userId));
+          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
+        }catch(err){
+          renderError(out, err.message || 'Failed to load forecast', ()=>loadForecastTo(elId,userId));
+        }
+      }
+
+      // Budget
+      async function loadBudget(userId){
+        const out = document.getElementById('budget-output');
+        out.innerHTML = '';
+        if(!userId){ out.innerHTML = '<div class="alert">Please provide a user id.</div>'; return }
+        try{
+          const data = await apiFetch('/v1/budget/' + encodeURIComponent(userId));
+          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
+        }catch(err){
+          renderError(out, err.message || 'Failed to load budget', ()=>loadBudget(userId));
+        }
+      }
+
+      // Transactions / classify
+      async function classifyTransaction(){
+        const out = document.getElementById('txn-output');
+        out.innerHTML = '';
+        const text = document.getElementById('txn-text').value || '';
+        if(!text.trim()){ out.innerHTML = '<div class="alert">Please enter transaction text.</div>'; return }
+        try{
+          const data = await apiFetch('/v1/classify', {method:'POST', body: JSON.stringify({text})});
+          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
+        }catch(err){
+          renderError(out, err.message || 'Failed to classify', classifyTransaction);
+        }
+      }
+
+      function renderError(container, message, retryFn){
+        const div = document.createElement('div');
+        div.className = 'alert';
+        div.innerHTML = '<strong>Error:</strong> '+escapeHtml(message);
+        const btn = document.createElement('button');
+        btn.textContent = 'Retry';
+        btn.className = 'retry';
+        btn.addEventListener('click', ()=>{div.remove(); retryFn();});
+        div.appendChild(btn);
+        container.appendChild(div);
+      }
+
+      function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+      // Wire UI buttons
+      document.getElementById('dashboard-load').addEventListener('click', ()=>{
+        const uid = document.getElementById('dashboard-user-id').value.trim();
+        loadForecastTo('dashboard-output', uid);
+      });
+      document.getElementById('forecast-load').addEventListener('click', ()=>{
+        const uid = document.getElementById('forecast-user-id').value.trim();
+        loadForecastTo('forecast-output', uid);
+      });
+      document.getElementById('budget-load').addEventListener('click', ()=>{
+        const uid = document.getElementById('budget-user-id').value.trim();
+        loadBudget(uid);
+      });
+      document.getElementById('txn-classify').addEventListener('click', classifyTransaction);
+
+      // Settings
+      document.getElementById('save-api-key').addEventListener('click', ()=>{
+        const v = document.getElementById('api-key-input').value.trim();
+        setApiKey(v);
+        alert('API key saved locally');
+      });
+      // populate saved key if present (masked)
+      (function populateKey(){ const k = getApiKey(); if(k) document.getElementById('api-key-input').value = k })();
+
+      // expose helpers to console for debugging (optional)
+      window.finApi = {loadForecastTo, loadBudget, classifyTransaction, getApiKey, setApiKey};
+
+    })();
+    </script>
+  </body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinWise AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ── Login Overlay ──────────────────────────────────────── -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <div class="login-brand">💰 FinWise AI</div>
+    <div class="login-tagline">Intelligent Financial Guidance</div>
+
+    <div class="form-group">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="your@email.com">
+    </div>
+    <div class="form-group">
+      <label for="loginKey">API Key</label>
+      <input type="password" id="loginKey" placeholder="Enter your API key">
+    </div>
+    <button class="btn btn-primary" onclick="doLogin()">Connect</button>
+    <button class="btn-demo" onclick="demoLogin()">Use Demo Account</button>
+  </div>
+</div>
+
+<!-- ── App Shell ──────────────────────────────────────────── -->
+<div class="app" id="appShell" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">💰 FinWise AI</div>
+
+    <nav>
+      <ul class="sidebar-nav">
+        <li><a href="#" data-page="dashboard" class="active">
+          <span>📊</span> Dashboard
+        </a></li>
+        <li><a href="#" data-page="classify">
+          <span>📝</span> Classify
+        </a></li>
+        <li><a href="#" data-page="forecast">
+          <span>📈</span> Forecast
+        </a></li>
+        <li><a href="#" data-page="budget">
+          <span>💰</span> Budget
+        </a></li>
+        <li><a href="#" data-page="about">
+          <span>ℹ️</span> About
+        </a></li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <div class="sidebar-avatar" id="userAvatar">D</div>
+        <div>
+          <div class="sidebar-user-name" id="userName">Demo</div>
+          <div class="sidebar-user-email" id="userEmail">demo@example.com</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">🚪 Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- ── Dashboard Page ───────────────────────────────── -->
+    <section class="page active" id="page-dashboard">
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-subtitle">Your financial overview at a glance</p>
+
+      <div class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-label">Total Balance</div>
+          <div class="metric-value">$24,562.00</div>
+          <div class="metric-change up">▲ +2.4% vs last month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Monthly Income</div>
+          <div class="metric-value">$8,450.00</div>
+          <div class="metric-change up">▲ +5.1% vs last month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Monthly Expenses</div>
+          <div class="metric-value">$3,240.50</div>
+          <div class="metric-change down">▼ −1.2% vs last month</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Classify Page ────────────────────────────────── -->
+    <section class="page" id="page-classify">
+      <h1 class="page-title">Transaction Classifier</h1>
+      <p class="page-subtitle">Tell us about a purchase and AI will categorize it for you</p>
+
+      <p style="font-size:0.8125rem;color:var(--muted);margin-bottom:0.75rem;">💡 Try a sample transaction</p>
+      <div class="samples-row">
+        <button class="btn btn-sample" onclick="fillSample('NETFLIX',-15.99,4899)">NETFLIX</button>
+        <button class="btn btn-sample" onclick="fillSample('SHELL',-45.00,5541)">SHELL</button>
+        <button class="btn btn-sample" onclick="fillSample('WHOLE FOODS',-89.32,5411)">WHOLE FOODS</button>
+        <button class="btn btn-sample" onclick="fillSample('UBER',-24.50,4121)">UBER</button>
+        <button class="btn btn-sample" onclick="fillSample('AMAZON',-67.23,5311)">AMAZON</button>
+      </div>
+
+      <p style="font-size:0.8125rem;color:var(--muted);margin-bottom:0.75rem;">✏️ Enter transaction details</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="merchant">Store / Merchant Name</label>
+          <input type="text" id="merchant" placeholder="e.g., Starbucks, Amazon, Walmart">
+        </div>
+        <div class="form-group">
+          <label for="amount">Amount spent ($)</label>
+          <input type="number" id="amount" step="0.01" placeholder="0.00">
+          <div class="help-text">Negative for purchases</div>
+        </div>
+        <div class="form-group">
+          <label for="mcc">Merchant Type (optional)</label>
+          <input type="number" id="mcc" placeholder="0" value="0">
+          <div class="help-text">Auto-detected from merchant name</div>
+        </div>
+        <div class="form-group">
+          <label for="channel">Where did you shop?</label>
+          <select id="channel">
+            <option value="POS">In Store</option>
+            <option value="ONLINE">Online</option>
+            <option value="ATM">ATM</option>
+            <option value="TRANSFER">Transfer</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="classifyTransaction()">🔍 Analyze Transaction</button>
+
+      <div class="spinner" id="classifySpinner">AI is thinking…</div>
+
+      <div class="alert alert-error" id="classifyError"></div>
+
+      <div class="result-card" id="classifyResult" style="display:none">
+        <p style="font-size:0.8125rem;color:var(--muted);margin-bottom:1rem;">✅ Got it! Here's what AI found</p>
+        <div class="result-grid">
+          <div>
+            <div class="result-label">Category</div>
+            <div class="result-value" id="resCategory">—</div>
+          </div>
+          <div>
+            <div class="result-label">AI Confidence</div>
+            <div class="result-value" id="resConfidence">—</div>
+            <div class="result-hint" id="resConfHint"></div>
+          </div>
+          <div>
+            <div class="result-label">Spending Habit Score</div>
+            <div class="result-value" id="resHabit">—</div>
+            <div class="result-hint" id="resHabitHint"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Forecast Page ────────────────────────────────── -->
+    <section class="page" id="page-forecast">
+      <div class="forecast-header">
+        <div>
+          <h1 class="page-title">Spending Forecast</h1>
+          <p class="page-subtitle">See where your money is going</p>
+        </div>
+        <span class="badge">🎯 AI Accuracy: 92%</span>
+      </div>
+
+      <div class="form-grid" style="max-width:400px">
+        <div class="form-group">
+          <label for="forecastDays">Forecast for next</label>
+          <select id="forecastDays">
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" style="max-width:400px" onclick="getForecast()">📊 Show My Forecast</button>
+
+      <div class="spinner" id="forecastSpinner">AI is predicting your spending…</div>
+      <div class="alert alert-error" id="forecastError"></div>
+
+      <div class="chart-placeholder" id="forecastChart">
+        Chart will appear here after you click "Show My Forecast"
+      </div>
+    </section>
+
+    <!-- ── Budget Page ──────────────────────────────────── -->
+    <section class="page" id="page-budget">
+      <h1 class="page-title">Budget Recommendations</h1>
+      <p class="page-subtitle">Personalized spending limits based on your habits</p>
+
+      <button class="btn btn-primary" style="max-width:400px" onclick="getBudget()">💰 Create My Budget</button>
+
+      <div class="spinner" id="budgetSpinner">AI is analyzing your habits…</div>
+      <div class="alert alert-error" id="budgetError"></div>
+
+      <div id="budgetResult"></div>
+    </section>
+
+    <!-- ── About Page ───────────────────────────────────── -->
+    <section class="page" id="page-about">
+      <h1 class="page-title">About FinWise AI</h1>
+      <p class="page-subtitle">Intelligent financial guidance powered by machine learning</p>
+
+      <div class="about-stats">
+        <div>
+          <div class="about-stat-value">99.96%</div>
+          <div class="about-stat-label">Classification Accuracy</div>
+        </div>
+        <div>
+          <div class="about-stat-value">92%</div>
+          <div class="about-stat-label">Forecast Accuracy</div>
+        </div>
+        <div>
+          <div class="about-stat-value">80.9%</div>
+          <div class="about-stat-label">Budget Acceptance Rate</div>
+        </div>
+      </div>
+
+      <p class="about-text">
+        FinWise AI uses a LightGBM classifier for transaction categorization,
+        an ensemble forecaster combining Prophet and LightGBM for spending prediction,
+        and a scipy-based optimizer for personalized budget recommendations.
+        Every decision is explained with SHAP feature attributions.
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<!-- All JavaScript inlined directly in HTML -->
+<script>
+/* ── State ────────────────────────────────────────────────── */
+const API_URL = 'https://fin-advisor-sa6h.onrender.com';
+let state = {
+  email:  null,
+  apiKey: null,
+  userId: null,
+};
+
+/* ── Auth ─────────────────────────────────────────────────── */
+function doLogin() {
+  const email  = document.getElementById('loginEmail').value.trim();
+  const apiKey = document.getElementById('loginKey').value.trim();
+  if (!email || !apiKey) return;
+  authenticate(email, apiKey);
+}
+
+function demoLogin() {
+  authenticate('demo@example.com', 'demo_key_123');
+}
+
+function authenticate(email, apiKey) {
+  state.email  = email;
+  state.apiKey = apiKey;
+  state.userId = 'user_' + String(Math.abs(hashCode(email)) % 1000000).padStart(6, '0');
+
+  // Save to localStorage for persistence
+  localStorage.setItem('finwise_email', email);
+  localStorage.setItem('finwise_apiKey', apiKey);
+
+  // Update sidebar
+  const name = email.split('@')[0];
+  document.getElementById('userName').textContent  = name;
+  document.getElementById('userEmail').textContent = email;
+  document.getElementById('userAvatar').textContent = name[0].toUpperCase();
+
+  // Show app
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+}
+
+function doLogout() {
+  state = { email: null, apiKey: null, userId: null };
+  localStorage.removeItem('finwise_email');
+  localStorage.removeItem('finwise_apiKey');
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginKey').value   = '';
+}
+
+/* ── Initialize Session from localStorage ──────────────────── */
+function restoreSessionFromStorage() {
+  const savedEmail = localStorage.getItem('finwise_email');
+  const savedKey = localStorage.getItem('finwise_apiKey');
+  if (savedEmail && savedKey) {
+    document.getElementById('loginEmail').value = savedEmail;
+    document.getElementById('loginKey').value = savedKey;
+    authenticate(savedEmail, savedKey);
+  }
+}
+
+// Restore session when page loads
+window.addEventListener('load', restoreSessionFromStorage);
+
+/* ── Routing ──────────────────────────────────────────────── */
+document.querySelectorAll('.sidebar-nav a').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const page = link.dataset.page;
+
+    // Update nav active state
+    document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+    link.classList.add('active');
+
+    // Show page
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+  });
+});
+
+/* ── Classify ─────────────────────────────────────────────── */
+function fillSample(merchant, amount, mcc) {
+  document.getElementById('merchant').value = merchant;
+  document.getElementById('amount').value   = amount;
+  document.getElementById('mcc').value      = mcc;
+}
+
+async function classifyTransaction() {
+  const merchant = document.getElementById('merchant').value.trim();
+  const amount   = parseFloat(document.getElementById('amount').value);
+  const mcc      = parseInt(document.getElementById('mcc').value) || 0;
+  const channel  = document.getElementById('channel').value;
+
+  if (!merchant || isNaN(amount) || amount === 0) {
+    showAlert('classifyError', 'Please enter a store name and amount');
+    return;
+  }
+
+  hideEl('classifyResult');
+  hideAlert('classifyError');
+  showSpinner('classifySpinner');
+
+  try {
+    const res = await fetch(`${API_URL}/v1/classify`, {
+      method: 'POST',
+      headers: {
+        'X-API-Key':    state.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount,
+        merchant_name: merchant,
+        merchant_mcc:  mcc,
+        timestamp:     new Date().toISOString(),
+        channel,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`${res.status}: ${text}`);
+    }
+
+    const data = await res.json();
+
+    // Category
+    document.getElementById('resCategory').textContent = data.category_l2;
+
+    // Confidence
+    const conf = (data.confidence * 100);
+    document.getElementById('resConfidence').textContent = conf.toFixed(1) + '%';
+    const confHint = conf >= 95 ? '🎯 Very sure' : conf >= 80 ? '👍 Fairly confident' : '🤔 Less certain';
+    document.getElementById('resConfHint').textContent = confHint;
+
+    // Habit score
+    const habit = (data.impulse_score || 0) * 100;
+    document.getElementById('resHabit').textContent = habit.toFixed(0) + '%';
+    const habitHint = habit >= 70 ? '🔄 Regular habit' : '✨ One-time purchase';
+    document.getElementById('resHabitHint').textContent = habitHint;
+
+    showEl('classifyResult');
+  } catch (err) {
+    showAlert('classifyError', 'Error: ' + err.message);
+  } finally {
+    hideSpinner('classifySpinner');
+  }
+}
+
+/* ── Forecast ─────────────────────────────────────────────── */
+async function getForecast() {
+  const horizon = document.getElementById('forecastDays').value;
+  hideAlert('forecastError');
+  showSpinner('forecastSpinner');
+  document.getElementById('forecastChart').textContent = '';
+
+  try {
+    const res = await fetch(
+      `${API_URL}/v1/forecast/${state.userId}?horizon=${horizon}`,
+      { headers: { 'X-API-Key': state.apiKey } }
+    );
+
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+
+    // Render simple text-based forecast (chart library can be added later)
+    let html = '<div style="padding:2rem">';
+    if (data.forecasts && data.forecasts.length) {
+      data.forecasts.forEach(f => {
+        html += `
+          <div style="margin-bottom:1.5rem">
+            <div style="font-weight:500;margin-bottom:0.25rem">${f.category}</div>
+            <div style="display:flex;gap:2rem;font-size:0.875rem;color:var(--muted)">
+              <span>Low: $${(f.p10 || 0).toFixed(2)}</span>
+              <span>Expected: $${(f.p50 || 0).toFixed(2)}</span>
+              <span>High: $${(f.p90 || 0).toFixed(2)}</span>
+            </div>
+          </div>`;
+      });
+    } else {
+      html += '<div style="color:var(--muted)">No forecast data available</div>';
+    }
+    html += '</div>';
+    document.getElementById('forecastChart').innerHTML = html;
+    document.getElementById('forecastChart').style.height = 'auto';
+  } catch (err) {
+    showAlert('forecastError', 'Could not load forecast: ' + err.message);
+    document.getElementById('forecastChart').textContent = 'Failed to load forecast';
+  } finally {
+    hideSpinner('forecastSpinner');
+  }
+}
+
+/* ── Budget ───────────────────────────────────────────────── */
+async function getBudget() {
+  hideAlert('budgetError');
+  showSpinner('budgetSpinner');
+  document.getElementById('budgetResult').innerHTML = '';
+
+  try {
+    const res = await fetch(
+      `${API_URL}/v1/budget/${state.userId}`,
+      { headers: { 'X-API-Key': state.apiKey } }
+    );
+
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+
+    let html = '<div style="margin-top:2rem">';
+    if (data.recommendations && data.recommendations.length) {
+      data.recommendations.forEach(rec => {
+        html += `
+          <div style="margin-bottom:1.5rem;padding-bottom:1.5rem">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-weight:500">${rec.category}</span>
+              <span style="font-size:1.25rem;font-weight:600">$${rec.recommended_budget.toFixed(2)}/mo</span>
+            </div>
+            <div style="font-size:0.875rem;color:var(--muted);margin-top:0.375rem">${rec.explanation || ''}</div>
+          </div>`;
+      });
+    } else {
+      html += '<div style="color:var(--muted)">No budget recommendations available</div>';
+    }
+    html += '</div>';
+    document.getElementById('budgetResult').innerHTML = html;
+  } catch (err) {
+    showAlert('budgetError', 'Could not load budget: ' + err.message);
+  } finally {
+    hideSpinner('budgetSpinner');
+  }
+}
+
+/* ── Helpers ──────────────────────────────────────────────── */
+function showSpinner(id) { document.getElementById(id).classList.add('show'); }
+function hideSpinner(id) { document.getElementById(id).classList.remove('show'); }
+function showEl(id)      { document.getElementById(id).style.display = 'block'; }
+function hideEl(id)      { document.getElementById(id).style.display = 'none'; }
+
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideAlert(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+function hashCode(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h) + s.charCodeAt(i);
+    h |= 0;
+  }
+  return h;
+}
+</script>
+</body>
+</html>

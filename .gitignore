@@ -88,4 +88,4 @@ customer-validation/
 *.log
 
 # Local frontend folder
-frontend/
+# frontend/  (kept local previously) — now tracked again
