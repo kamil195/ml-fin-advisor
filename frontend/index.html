@@ -85,6 +85,7 @@
           <div>
             <label>API Key: <input id="api-key-input" type="password" style="width:60%"/></label>
             <button id="save-api-key">Save</button>
+            <button id="copy-api-key">Copy API Key</button>
             <span id="api-status" style="margin-left:12px;font-weight:600"></span>
           </div>
         </section>
@@ -92,6 +93,21 @@
 
       <div id="spinner" class="spinner hidden">Loading...</div>
     </div>
+
+    <!-- Sentry initialization (replace DSN with your project's DSN) -->
+    <script src="https://browser.sentry-cdn.com/7.61.0/bundle.min.js" crossorigin="anonymous"></script>
+    <script>
+      // Initialize Sentry (basic, free-tier). Replace 'YOUR_SENTRY_DSN' with your DSN.
+      if(window.Sentry){
+        try{
+          Sentry.init({
+            dsn: 'YOUR_SENTRY_DSN',
+            integrations: [new Sentry.BrowserTracing()],
+            tracesSampleRate: 0.0 // set to 0 for minimal sampling; increase for performance tracing
+          });
+        }catch(e){ console.warn('Sentry init failed', e) }
+      }
+    </script>
 
     <script>
     (function(){
@@ -144,10 +160,10 @@
         sec.insertBefore(d, sec.firstChild);
       }
 
-      // Hardcoded test API key for development. Replace with a real test key when available.
-      const HARDCODED_API_KEY = 'demo_test_key_ReplaceMe';
+      // No hardcoded API key — require users to enter their own key.
+      const HARDCODED_API_KEY = '';
       function getApiKey(){
-        // localStorage override wins; otherwise use the hardcoded key for development
+        // localStorage override wins; otherwise return empty string
         return localStorage.getItem('fin_api_key') || HARDCODED_API_KEY || '';
       }
       function setApiKey(v){if(v) localStorage.setItem('fin_api_key',v); else localStorage.removeItem('fin_api_key'); updateApiStatus();}
@@ -364,6 +380,21 @@
         const v = document.getElementById('api-key-input').value.trim();
         setApiKey(v);
         alert('API key saved locally');
+      });
+      document.getElementById('copy-api-key').addEventListener('click', async ()=>{
+        const key = localStorage.getItem('fin_api_key') || '';
+        const inputVal = document.getElementById('api-key-input').value || '';
+        const toCopy = key || inputVal;
+        if(!toCopy){ alert('No API key available to copy'); return }
+        try{
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            await navigator.clipboard.writeText(toCopy);
+          } else {
+            // fallback
+            const tmp = document.createElement('textarea'); tmp.value = toCopy; document.body.appendChild(tmp); tmp.select(); document.execCommand('copy'); tmp.remove();
+          }
+          alert('API key copied to clipboard');
+        }catch(e){ alert('Copy failed'); }
       });
       // populate saved key if present (masked)
       (function populateKey(){ const k = getApiKey(); if(k) document.getElementById('api-key-input').value = k })();
