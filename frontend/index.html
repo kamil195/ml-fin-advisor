@@ -14,11 +14,25 @@
       .spinner{position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:8px;border-radius:6px}
       .alert{background:#fee;border:color:#a00;padding:8px;border-radius:6px;margin:8px 0}
       button.retry{margin-left:8px}
+      /* Responsive: collapse nav on small screens */
+      #nav-toggle{display:none;background:transparent;border:none;font-size:20px}
+      @media (max-width:720px){
+        nav{display:none}
+        #nav-toggle{display:inline-block}
+      }
+      /* SHAP list */
+      .shap-list{margin-top:8px}
+      .shap-item{display:flex;align-items:center;gap:8px;margin:6px 0}
+      .shap-bar{height:10px;border-radius:4px;background:#ddd;flex:1;position:relative;overflow:hidden}
+      .shap-bar-inner{height:100%;position:absolute;left:0;top:0}
+      .shap-pos{background:#4caf50}
+      .shap-neg{background:#f44336}
     </style>
   </head>
   <body>
     <div id="app">
       <nav>
+        <button id="nav-toggle" class="hidden" aria-label="Toggle navigation" style="margin-right:8px">☰</button>
         <a href="#" data-target="dashboard">Dashboard</a>
         <a href="#" data-target="transactions">Transactions</a>
         <a href="#" data-target="forecast">Forecast</a>
@@ -51,6 +65,7 @@
           <label>User ID: <input id="forecast-user-id" placeholder="user_id" /></label>
           <div>
             <button id="forecast-load">Load Forecast</button>
+            <button id="forecast-export" class="hidden">Export as CSV</button>
           </div>
           <div id="forecast-output"></div>
         </section>
@@ -60,6 +75,7 @@
           <label>User ID: <input id="budget-user-id" placeholder="user_id" /></label>
           <div>
             <button id="budget-load">Load Budget</button>
+            <button id="budget-export" class="hidden">Export as CSV</button>
           </div>
           <div id="budget-output"></div>
         </section>
@@ -128,7 +144,12 @@
         sec.insertBefore(d, sec.firstChild);
       }
 
-      function getApiKey(){return localStorage.getItem('fin_api_key')||''}
+      // Hardcoded test API key for development. Replace with a real test key when available.
+      const HARDCODED_API_KEY = 'demo_test_key_ReplaceMe';
+      function getApiKey(){
+        // localStorage override wins; otherwise use the hardcoded key for development
+        return localStorage.getItem('fin_api_key') || HARDCODED_API_KEY || '';
+      }
       function setApiKey(v){if(v) localStorage.setItem('fin_api_key',v); else localStorage.removeItem('fin_api_key'); updateApiStatus();}
       function updateApiStatus(){
         const status = document.getElementById('api-status');
@@ -147,6 +168,10 @@
         try{
           const res = await fetch(BASE + path, opts);
           if(!res.ok){
+            // handle 401 specifically with a clear message
+            if(res.status === 401){
+              throw new Error('Invalid API Key. Please check your Settings.');
+            }
             const text = await res.text().catch(()=>res.statusText);
             const err = new Error(text || res.statusText || 'API error');
             err.status = res.status;
@@ -169,6 +194,9 @@
         try{
           const data = await apiFetch('/v1/forecast/' + encodeURIComponent(userId));
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
+          // store last fetched forecast for export
+          window._lastForecastData = data;
+          document.getElementById('forecast-export').classList.remove('hidden');
         }catch(err){
           renderError(out, err.message || 'Failed to load forecast', ()=>loadForecastTo(elId,userId,btn));
         }finally{
@@ -187,6 +215,8 @@
         try{
           const data = await apiFetch('/v1/budget/' + encodeURIComponent(userId));
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
+          window._lastBudgetData = data;
+          document.getElementById('budget-export').classList.remove('hidden');
         }catch(err){
           renderError(out, err.message || 'Failed to load budget', ()=>loadBudget(userId,btn));
         }finally{
@@ -226,6 +256,38 @@
         container.appendChild(div);
       }
 
+      // Render SHAP explanations if present in classification response
+      function renderShap(container, shap){
+        // shap can be an object {feature: value} or array of {feature,value}
+        const div = document.createElement('div');
+        div.className = 'shap-list';
+        let items = [];
+        if(Array.isArray(shap)){
+          items = shap.map(s=>({name: s.feature||s.name, value: s.value||s.score||0}));
+        } else if(shap && typeof shap === 'object'){
+          items = Object.keys(shap).map(k=>({name:k, value: shap[k]}));
+        }
+        if(items.length===0) return;
+        // sort by absolute contribution desc
+        items.sort((a,b)=>Math.abs(b.value)-Math.abs(a.value));
+        const maxAbs = Math.max(...items.map(i=>Math.abs(i.value)), 1e-6);
+        items.forEach(it=>{
+          const row = document.createElement('div');
+          row.className = 'shap-item';
+          const label = document.createElement('div'); label.style.width='140px'; label.textContent = it.name;
+          const barWrap = document.createElement('div'); barWrap.className='shap-bar';
+          const inner = document.createElement('div'); inner.className='shap-bar-inner '+(it.value>=0?'shap-pos':'shap-neg');
+          const pct = Math.min(1, Math.abs(it.value)/maxAbs);
+          inner.style.width = (pct*100)+'%';
+          inner.title = String(it.value);
+          barWrap.appendChild(inner);
+          const val = document.createElement('div'); val.style.width='80px'; val.style.textAlign='right'; val.textContent = Number(it.value).toFixed(3);
+          row.appendChild(label); row.appendChild(barWrap); row.appendChild(val);
+          div.appendChild(row);
+        });
+        container.appendChild(div);
+      }
+
       function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
       // Wire UI buttons
@@ -242,6 +304,60 @@
         loadBudget(uid, e.currentTarget);
       });
       document.getElementById('txn-classify').addEventListener('click', (e)=> classifyTransaction(e.currentTarget));
+
+      // Export CSV handlers
+      function jsonToCsv(data){
+        // handle arrays of objects or object-of-arrays/time-series
+        if(!data) return '';
+        if(Array.isArray(data)){
+          const keys = new Set(); data.forEach(r=>Object.keys(r||{}).forEach(k=>keys.add(k)));
+          const cols = Array.from(keys);
+          const rows = [cols.join(',')];
+          data.forEach(r=>{ rows.push(cols.map(c=>escapeCsv(String((r&&r[c])!=null? r[c] : '') )).join(',')) });
+          return rows.join('\n');
+        }
+        // if object with arrays (e.g., {dates:[], values:[]}) try to zip
+        const keys = Object.keys(data||{});
+        if(keys.length===0) return '';
+        // if all values are arrays of same length
+        const len = Math.max(...keys.map(k=>Array.isArray(data[k])?data[k].length:1));
+        const header = keys.join(',');
+        const rows = [header];
+        for(let i=0;i<len;i++){
+          const vals = keys.map(k=>escapeCsv(String((Array.isArray(data[k])? (data[k][i]!=null?data[k][i]:'') : data[k]))));
+          rows.push(vals.join(','));
+        }
+        return rows.join('\n');
+      }
+      function escapeCsv(s){ if(s==null) return ''; return '"'+String(s).replace(/"/g,'""')+'"'; }
+
+      function downloadCsv(filename, csv){
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      }
+
+      document.getElementById('forecast-export').addEventListener('click', ()=>{
+        const data = window._lastForecastData;
+        const csv = jsonToCsv(data);
+        if(!csv){ alert('No data to export'); return }
+        downloadCsv('forecast.csv', csv);
+      });
+      document.getElementById('budget-export').addEventListener('click', ()=>{
+        const data = window._lastBudgetData;
+        const csv = jsonToCsv(data);
+        if(!csv){ alert('No data to export'); return }
+        downloadCsv('budget.csv', csv);
+      });
+
+      // Responsive nav toggle
+      const navToggle = document.getElementById('nav-toggle');
+      if(navToggle){
+        navToggle.addEventListener('click', ()=>{
+          const nav = document.querySelector('nav');
+          if(nav.style.display==='flex' || nav.style.display==='block') nav.style.display='none'; else nav.style.display='flex';
+        });
+      }
 
       // Settings
       document.getElementById('save-api-key').addEventListener('click', ()=>{
