@@ -31,7 +31,6 @@ _PUBLIC_PATHS: set[str] = {
     "/redoc",
     "/favicon.ico",
     "/admin/generate-key",
-    "/webhooks/lemonsqueezy",
 }
 
 # Consumer endpoints need their own auth (user_id based), not API key
@@ -70,12 +69,9 @@ async def verify_api_key(
     and plan-based usage quotas.
 
     * If ``API_KEYS`` env var is empty/unset → open access (no auth).
-    * Public paths (health, docs, webhooks) are always open.
+    * Public paths (health, docs, admin) are always open.
     * Otherwise, ``X-API-Key`` header must contain a valid key.
-    * If the key has an associated subscription, enforce monthly quota.
     """
-    from src.serving.subscriptions import subscription_store, usage_tracker
-
     # Public paths — always open
     if request.url.path in _PUBLIC_PATHS:
         return
@@ -99,33 +95,6 @@ async def verify_api_key(
         key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
         logger.warning("Invalid API key attempt (hash=%s)", key_hash)
         raise HTTPException(status_code=401, detail="Invalid API key.")
-
-    # ── Subscription & quota checks ─────────────────────────
-    sub = subscription_store.get_by_key(api_key)
-    if sub is not None:
-        # Check subscription is active
-        if sub.status not in ("active",):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Subscription is {sub.status}. Please renew your plan.",
-            )
-
-        # Check monthly usage quota
-        limit = sub.plan.monthly_limit
-        if not usage_tracker.check_quota(api_key, limit):
-            raise HTTPException(
-                status_code=429,
-                detail=(
-                    f"Monthly quota exceeded ({limit:,} calls/month on "
-                    f"{sub.plan.name} plan). Upgrade your plan for more."
-                ),
-            )
-
-        # Increment usage
-        usage_tracker.increment(api_key)
-
-    # Store subscription info on request state for route handlers
-    request.state.subscription = sub
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

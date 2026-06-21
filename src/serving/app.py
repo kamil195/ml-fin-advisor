@@ -100,10 +100,9 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     from src.serving.routes.budget import router as budget_router
     from src.serving.routes.classify import router as classify_router
-    from src.serving.routes.consumer import router as consumer_router
     from src.serving.routes.forecast import router as forecast_router
     from src.serving.routes.health import router as health_router
-    from src.serving.routes.webhooks import router as webhooks_router
+    from src.serving.routes.live import router as live_router
 
     app = FastAPI(
         title="ML Fin-Advisor API",
@@ -140,8 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(classify_router, prefix="/v1", tags=["Classification"])
     app.include_router(forecast_router, prefix="/v1", tags=["Forecasting"])
     app.include_router(budget_router, prefix="/v1", tags=["Budget"])
-    app.include_router(consumer_router, tags=["Consumer"])
-    app.include_router(webhooks_router, tags=["Webhooks"])
+    app.include_router(live_router, tags=["Live Forecast & Budget"])
 
     # ── Admin: generate a new API key (prints to stdout) ────────
     @app.get("/admin/generate-key", tags=["Admin"], include_in_schema=False)
@@ -150,37 +148,6 @@ def create_app() -> FastAPI:
         key = generate_api_key()
         logger.info("Generated new API key: %s", key)
         return {"api_key": key, "note": "Add this to the API_KEYS env var."}
-
-    # ── Subscription status ─────────────────────────────────────
-    @app.get("/v1/subscription/status", tags=["Subscription"])
-    async def subscription_status(request: Request):
-        """Return the caller's plan, usage, and quota."""
-        from src.serving.subscriptions import subscription_store, usage_tracker
-
-        sub = getattr(request.state, "subscription", None)
-        if sub is None:
-            return {
-                "plan": "open_access",
-                "status": "active",
-                "monthly_limit": None,
-                "current_usage": 0,
-                "note": "No subscription linked — open access mode.",
-            }
-
-        return {
-            "plan": sub.plan.name,
-            "tier": sub.plan.tier.value,
-            "status": sub.status,
-            "monthly_limit": sub.plan.monthly_limit,
-            "current_usage": usage_tracker.current_usage(sub.api_key),
-            "remaining": (
-                sub.plan.monthly_limit - usage_tracker.current_usage(sub.api_key)
-                if sub.plan.monthly_limit is not None
-                else None
-            ),
-            "subscription_id": sub.subscription_id,
-            "customer_email": sub.customer_email,
-        }
 
     return app
 
