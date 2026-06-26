@@ -82,10 +82,14 @@ class ProphetModel:
         series = self._prepare_series(df, user_id, category)
 
         if len(series) < 4:
-            logger.warning(
-                "Insufficient data for Prophet (user=%s, cat=%s): %d weeks",
+            logger.info(
+                "Insufficient data for Prophet (user=%s, cat=%s): %d weeks — using naive fallback.",
                 user_id, category, len(series),
             )
+            self._models[f"{user_id}_{category}"] = {
+                "mean": float(series["y"].mean()),
+                "std": float(series["y"].std(ddof=0)),
+            }
             return self
 
         try:
