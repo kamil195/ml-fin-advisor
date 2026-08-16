@@ -1,6 +1,8 @@
 """Query latest MLflow run metrics."""
+import os
+
 import mlflow
-mlflow.set_tracking_uri("sqlite:///D:/Projects/ML Model for Fin-Tech/mlflow.db")
+mlflow.set_tracking_uri(os.environ.get("MLFLOW_TRACKING_URI", "sqlite:///mlflow.db"))
 runs = mlflow.search_runs(experiment_names=["fin-advisor-v1"], order_by=["start_time DESC"], max_results=1)
 for _, r in runs.iterrows():
     print(f"Run ID: {r['run_id']}")
