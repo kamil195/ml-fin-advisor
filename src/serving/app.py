@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.serving.cache import CacheClient, CACHE_TTLS
-from src.serving.middleware import generate_api_key, verify_api_key
+from src.serving.middleware import RateLimitMiddleware, generate_api_key, verify_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +119,19 @@ def create_app() -> FastAPI:
     # CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            "https://useplanwisely.vercel.app",
+            "http://localhost:5173",
+            "http://localhost:3000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    from src.serving.middleware import RateLimitMiddleware
+
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=600, burst=50)
 
     # Request timing middleware
     @app.middleware("http")
