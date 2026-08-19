@@ -59,7 +59,11 @@ class ClassifyResponse(ClassificationResult):
 # ── Feature engineering helpers (mirrors run_pipeline.py logic) ────────────────
 
 
-def _build_features(txn: Transaction, feature_cols: list[str]) -> dict[str, float]:
+def _build_features(
+    txn: Transaction,
+    feature_cols: list[str],
+    history_context: dict[str, float] | None = None,
+) -> dict[str, float]:
     """Build the numerical feature vector for a single transaction."""
     ts = txn.timestamp
     features: dict[str, float] = {}
@@ -67,10 +71,16 @@ def _build_features(txn: Transaction, feature_cols: list[str]) -> dict[str, floa
     # Numerical
     features["amount"] = txn.amount
     features["log_amount"] = math.log1p(abs(txn.amount))
-    features["amount_zscore_user"] = 0.0  # single txn — no user history
-    features["amount_pct_of_income"] = 0.0
-    features["rolling_spend_7d"] = abs(txn.amount)
-    features["rolling_spend_30d"] = abs(txn.amount)
+    if history_context:
+        features["amount_zscore_user"] = history_context.get("amount_zscore_user", 0.0)
+        features["amount_pct_of_income"] = history_context.get("amount_pct_of_income", 0.0)
+        features["rolling_spend_7d"] = history_context.get("rolling_spend_7d", abs(txn.amount))
+        features["rolling_spend_30d"] = history_context.get("rolling_spend_30d", abs(txn.amount))
+    else:
+        features["amount_zscore_user"] = 0.0
+        features["amount_pct_of_income"] = 0.0
+        features["rolling_spend_7d"] = abs(txn.amount)
+        features["rolling_spend_30d"] = abs(txn.amount)
 
     # Temporal
     features["txn_count_24h"] = 1
@@ -116,7 +126,11 @@ def _build_features(txn: Transaction, feature_cols: list[str]) -> dict[str, floa
 
 
 @router.post("/classify", response_model=ClassifyResponse)
-async def classify_transaction(request: ClassifyRequest, req: Request):
+async def classify_transaction(
+    request: ClassifyRequest,
+    req: Request,
+    history_context: dict[str, float] | None = None,
+):
     """
     Classify a single transaction into a spending category.
 
@@ -140,7 +154,7 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
         text_cols = [c for c in all_cols if c.startswith("text_svd_")]
         num_cols = [c for c in all_cols if not c.startswith("text_svd_")]
 
-        feat_dict = _build_features(txn, num_cols)
+        feat_dict = _build_features(txn, num_cols, history_context=history_context)
         X_num = np.array([[feat_dict.get(c, 0.0) for c in num_cols]], dtype=np.float64)
 
         # ── 2. TF-IDF text features ──────────────────────────────

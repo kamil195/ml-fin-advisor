@@ -140,6 +140,11 @@ class ClassifyLiveRequest(BaseModel):
     merchant: str = Field(..., min_length=1)
     amount: float
     date: str = Field(..., description="YYYY-MM-DD")
+    recent_transactions: list[LiveTransaction] | None = Field(
+        default=None,
+        description="Optional recent spend history (last 30-90 days) to compute real rolling features instead of defaults.",
+    )
+    monthly_income: float | None = Field(default=None, ge=0)
 
 
 @router.post("/classify/live")
@@ -154,6 +159,29 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
     except ValueError:
         ts = datetime.now(timezone.utc)
 
+    history_context = None
+    if body.recent_transactions:
+        now = datetime.now(timezone.utc)
+        amounts = [abs(t.amount) for t in body.recent_transactions if t.amount < 0]
+        if amounts:
+            import statistics
+            mean_amt = statistics.mean(amounts)
+            std_amt = statistics.pstdev(amounts) if len(amounts) > 1 else 1.0
+            spend_7d = sum(
+                abs(t.amount) for t in body.recent_transactions
+                if t.amount < 0 and (now - datetime.strptime(t.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)).days <= 7
+            )
+            spend_30d = sum(
+                abs(t.amount) for t in body.recent_transactions
+                if t.amount < 0 and (now - datetime.strptime(t.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)).days <= 30
+            )
+            history_context = {
+                "amount_zscore_user": (abs(body.amount) - mean_amt) / std_amt if std_amt > 0 else 0.0,
+                "amount_pct_of_income": abs(body.amount) / body.monthly_income if body.monthly_income else 0.0,
+                "rolling_spend_7d": spend_7d,
+                "rolling_spend_30d": spend_30d,
+            }
+
     txn = Transaction(
         user_id="planwise-live",
         timestamp=ts,
@@ -165,11 +193,38 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
         raw_description=body.merchant,
     )
 
-    result = await classify_transaction(ClassifyRequest(transaction=txn), request)
+    result = await classify_transaction(ClassifyRequest(transaction=txn), request, history_context=history_context)
     data = result.model_dump(mode="json")
 
     predicted_l2 = data["category_l2"]
     planwisely_category = L2_TO_PLANWISELY.get(predicted_l2, "Other")
+
+    behavior_insights = {}
+    if body.recent_transactions and len(body.recent_transactions) >= 4:
+        try:
+            from src.models.behavior.impulse_scorer import ImpulseScorer
+            from src.models.behavior.habit_index import HabitIndex
+
+            scorer = ImpulseScorer()
+            habit_calc = HabitIndex()
+            history_df = pd.DataFrame(
+                {
+                    "user_id": ["planwise-live"] * len(body.recent_transactions),
+                    "timestamp": [
+                        datetime.strptime(t.date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                        for t in body.recent_transactions
+                    ],
+                    "amount": [t.amount for t in body.recent_transactions],
+                    "category_l2": [t.category or "Other" for t in body.recent_transactions],
+                    "merchant_name": [t.merchant or "" for t in body.recent_transactions],
+                }
+            )
+            impulse_result = scorer.score(history_df)
+            habit_series = habit_calc.compute_series(history_df)
+            behavior_insights["impulse_score"] = round(float(impulse_result["impulse_score"].mean()), 4)
+            behavior_insights["habit_index"] = round(float(habit_series.mean()), 4)
+        except Exception as e:
+            logger.warning("Behavioral scoring skipped: %s", e)
 
     return {
         "category": planwisely_category,
@@ -179,6 +234,7 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
         "is_impulse": data["is_impulse"],
         "anchor_rule": data["anchor_rule"],
         "shap_features": data["shap_features"],
+        "behavior_insights": behavior_insights,
     }
 
 
@@ -280,6 +336,17 @@ async def forecast_live(body: ForecastLiveRequest):
         "categories": results,
         "total_spend": {"p10": total_p10, "p50": total_p50, "p90": total_p90},
     }
+
+
+@router.get("/admin/fairness-report", include_in_schema=False)
+async def fairness_report():
+    """Run the fairness audit module against recent prediction logs, if available."""
+    try:
+        from src.evaluation.fairness_audit import run_fairness_audit
+        report = run_fairness_audit()
+        return {"status": "ok", "report": report.__dict__}
+    except Exception as e:
+        return {"status": "unavailable", "detail": str(e)}
 
 
 # ============================================================================
