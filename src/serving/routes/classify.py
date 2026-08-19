@@ -50,6 +50,15 @@ class ClassifyResponse(ClassificationResult):
         default_factory=list,
         description="Top SHAP feature attributions for the predicted class",
     )
+    attribution_method: str = Field(
+        default="shap",
+        description=(
+            "How shap_features was computed. 'shap' = real per-transaction "
+            "TreeExplainer attributions. 'global_importance' = fallback to the "
+            "model's global feature importance, which is IDENTICAL for every "
+            "request and is not an explanation of this prediction."
+        ),
+    )
     anchor_rule: str = Field(
         default="",
         description="Human-readable IF-THEN anchor rule",
@@ -190,7 +199,7 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
         l1 = CATEGORY_HIERARCHY.get(l2, CategoryL1.FINANCIAL)
 
         # ── 8. SHAP feature attributions ──────────────────────────
-        shap_features = _compute_shap(
+        shap_features, attribution_method = _compute_shap(
             state.classifier, X, feature_names, predicted_idx
         )
 
@@ -213,6 +222,7 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
             is_impulse=is_impulse,
             impulse_score=round(impulse_score, 2),
             shap_features=shap_features,
+            attribution_method=attribution_method,
             anchor_rule=anchor_rule,
         )
 
@@ -227,41 +237,82 @@ def _compute_shap(
     feature_names: list[str],
     class_idx: int,
     top_k: int = 5,
-) -> list[SHAPAttribution]:
+) -> tuple[list[SHAPAttribution], str]:
     """
     Compute SHAP values using TreeExplainer when available,
     falling back to gain-based feature importance.
+
+    Returns ``(attributions, method)`` where ``method`` is ``"shap"`` for real
+    per-transaction attributions or ``"global_importance"`` for the fallback.
+    The distinction matters: the fallback is a single global ranking that is
+    *identical for every request*, so callers must not read it as an
+    explanation of this particular prediction.
     """
+    sv = None
+    method = "shap"
+
     try:
         import shap
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X)
-        # shap_values shape: (n_classes, n_samples, n_features) or (n_samples, n_features)
-        if isinstance(shap_values, list):
-            sv = shap_values[class_idx][0]
-        else:
-            sv = shap_values[0]
-    except Exception:
-        # Fallback: use gain-based feature importance
-        if hasattr(model, "feature_importances_"):
-            fi = model.feature_importances_
-            sv = fi.copy()
-        else:
-            return []
+    except ImportError:
+        # shap is not a declared dependency in requirements-serve.txt, so this
+        # is the path production actually takes. Keep it separate from genuine
+        # SHAP failures below rather than swallowing both in one except.
+        method = "global_importance"
+    else:
+        try:
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(X)
 
-    # Top-k features by absolute SHAP value
+            if isinstance(shap_values, list):
+                # shap < ~0.45: list of (n_samples, n_features), one per class.
+                sv = np.asarray(shap_values[class_idx])[0]
+            else:
+                arr = np.asarray(shap_values)
+                if arr.ndim == 3:
+                    # shap >= ~0.45 multiclass: (n_samples, n_features, n_classes).
+                    # Must select the predicted class's column, otherwise `sv`
+                    # stays 2-D and the top-k loop below raises
+                    # "truth value of an array ... is ambiguous".
+                    sv = arr[0, :, class_idx]
+                elif arr.ndim == 2:
+                    # Binary / regression: (n_samples, n_features).
+                    sv = arr[0]
+                else:
+                    sv = arr.ravel()
+        except Exception:
+            logger.warning("SHAP computation failed; using global importance", exc_info=True)
+            sv = None
+            method = "global_importance"
+
+    if sv is None:
+        if hasattr(model, "feature_importances_"):
+            sv = np.asarray(model.feature_importances_, dtype=np.float64)
+            method = "global_importance"
+        else:
+            return [], "global_importance"
+
+    sv = np.asarray(sv, dtype=np.float64).ravel()
+    if sv.shape[0] != len(feature_names):
+        logger.warning(
+            "Attribution length %d != feature count %d; skipping attributions",
+            sv.shape[0],
+            len(feature_names),
+        )
+        return [], method
+
+    # Top-k features by absolute attribution
     abs_sv = np.abs(sv)
     top_idx = np.argsort(abs_sv)[::-1][:top_k]
 
-    result = []
-    for i in top_idx:
-        if i < len(feature_names):
-            result.append(SHAPAttribution(
-                feature=feature_names[i],
-                value=round(float(X[0, i]), 4),
-                shap_value=round(float(sv[i]), 4),
-            ))
-    return result
+    result = [
+        SHAPAttribution(
+            feature=feature_names[int(i)],
+            value=round(float(X[0, int(i)]), 4),
+            shap_value=round(float(sv[int(i)]), 4),
+        )
+        for i in top_idx
+    ]
+    return result, method
 
 
 def _build_anchor_rule(

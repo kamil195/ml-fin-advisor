@@ -179,6 +179,7 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
         "is_impulse": data["is_impulse"],
         "anchor_rule": data["anchor_rule"],
         "shap_features": data["shap_features"],
+        "attribution_method": data["attribution_method"],
     }
 
 
