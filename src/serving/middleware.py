@@ -19,6 +19,7 @@ from collections import defaultdict
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -130,9 +131,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ]
 
         if len(self._requests[client_ip]) >= self.rpm:
-            raise HTTPException(
+            # NOTE: raising HTTPException here would surface as a 500, not a 429.
+            # Starlette's ExceptionMiddleware is mounted *inside* this middleware,
+            # so it never sees the exception and cannot convert it. Return the
+            # response directly instead.
+            return JSONResponse(
                 status_code=429,
-                detail="Rate limit exceeded. Try again later.",
+                content={"detail": "Rate limit exceeded. Try again later."},
             )
 
         self._requests[client_ip].append(now)
