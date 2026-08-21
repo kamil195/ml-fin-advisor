@@ -250,7 +250,7 @@
           const daysEl = document.getElementById('forecast-range');
           const days = daysEl ? daysEl.value : '';
           let path = '/v1/forecast/' + encodeURIComponent(userId);
-          if(days) path += '?days=' + encodeURIComponent(days);
+          if(days) path += '?horizon=' + encodeURIComponent(days);
           const data = await apiFetch(path);
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
           // store last fetched forecast for export
@@ -294,7 +294,22 @@
         if(text.length > 2000){ showInlineMessage(section, 'Transaction text is too long (max 2000 chars).', 'error'); return }
         setButtonLoading(btn, true, 'Classifying...');
         try{
-          const data = await apiFetch('/v1/classify', {method:'POST', body: JSON.stringify({text})});
+          const data = await apiFetch('/v1/classify', {
+            method:'POST',
+            body: JSON.stringify({
+              transaction: {
+                user_id: 'demo_user',
+                timestamp: new Date().toISOString(),
+                amount: -42.5,
+                currency: 'USD',
+                merchant_name: text.trim().slice(0, 500),
+                merchant_mcc: 5999,
+                account_type: 'CHECKING',
+                channel: 'ONLINE',
+                raw_description: text.trim().slice(0, 2000),
+              }
+            })
+          });
           out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
         }catch(err){
           renderError(out, err.message || 'Failed to classify', ()=>classifyTransaction(btn));
@@ -489,7 +504,7 @@
       <input type="password" id="loginKey" placeholder="Enter your API key">
     </div>
     <button class="btn btn-primary" onclick="doLogin()">Connect</button>
-    <button class="btn-demo" onclick="demoLogin()">Use Demo Account</button>
+    <button class="btn-demo" onclick="demoLogin()">Try Demo</button>
   </div>
 </div>
 
@@ -498,7 +513,11 @@
 
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-brand">💰 FinWise AI</div>
+    <div class="sidebar-brand">
+      💰 FinWise AI
+      <span id="demoModeBadge" style="display:none;margin-left:0.5rem;font-size:0.75rem;font-weight:600;vertical-align:middle;">🔬 Demo Mode</span>
+      <div id="demoQuotaStatus" style="display:none;margin-top:0.35rem;font-size:0.8125rem;color:var(--muted);"></div>
+    </div>
 
     <nav>
       <ul class="sidebar-nav">
@@ -706,6 +725,7 @@
 <script>
 /* ── State ────────────────────────────────────────────────── */
 const API_URL = 'https://fin-advisor-sa6h.onrender.com';
+const DEMO_API_KEY = 'demo_key_public';
 let state = {
   email:  null,
   apiKey: null,
@@ -721,13 +741,20 @@ function doLogin() {
 }
 
 function demoLogin() {
-  authenticate('demo@example.com', 'demo_key_123');
+  const emailInput = document.getElementById('loginEmail');
+  const keyInput = document.getElementById('loginKey');
+  if (!emailInput.value.trim()) {
+    emailInput.value = 'demo@example.com';
+  }
+  keyInput.value = DEMO_API_KEY;
+  doLogin();
 }
 
 function authenticate(email, apiKey) {
   state.email  = email;
   state.apiKey = apiKey;
   state.userId = 'user_' + String(Math.abs(hashCode(email)) % 1000000).padStart(6, '0');
+  syncDemoModeUi();
 
   // Save to localStorage for persistence
   localStorage.setItem('finwise_email', email);
@@ -748,6 +775,7 @@ function doLogout() {
   state = { email: null, apiKey: null, userId: null };
   localStorage.removeItem('finwise_email');
   localStorage.removeItem('finwise_apiKey');
+  syncDemoModeUi();
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginEmail').value = '';
@@ -762,6 +790,8 @@ function restoreSessionFromStorage() {
     document.getElementById('loginEmail').value = savedEmail;
     document.getElementById('loginKey').value = savedKey;
     authenticate(savedEmail, savedKey);
+  } else {
+    syncDemoModeUi();
   }
 }
 
@@ -823,11 +853,11 @@ async function classifyTransaction() {
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${res.status}: ${text}`);
+      throw await readApiError(res);
     }
 
     const data = await res.json();
+    updateQuotaStatusFromResponse(res);
 
     // Category
     document.getElementById('resCategory').textContent = data.category_l2;
@@ -847,6 +877,9 @@ async function classifyTransaction() {
     showEl('classifyResult');
   } catch (err) {
     showAlert('classifyError', 'Error: ' + err.message);
+    if (err.quotaMessage) {
+      setDemoQuotaStatus(err.quotaMessage);
+    }
   } finally {
     hideSpinner('classifySpinner');
   }
@@ -865,8 +898,11 @@ async function getForecast() {
       { headers: { 'X-API-Key': state.apiKey } }
     );
 
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
     const data = await res.json();
+    updateQuotaStatusFromResponse(res);
 
     // Render simple text-based forecast (chart library can be added later)
     let html = '<div style="padding:2rem">';
@@ -890,6 +926,9 @@ async function getForecast() {
     document.getElementById('forecastChart').style.height = 'auto';
   } catch (err) {
     showAlert('forecastError', 'Could not load forecast: ' + err.message);
+    if (err.quotaMessage) {
+      setDemoQuotaStatus(err.quotaMessage);
+    }
     document.getElementById('forecastChart').textContent = 'Failed to load forecast';
   } finally {
     hideSpinner('forecastSpinner');
@@ -908,8 +947,11 @@ async function getBudget() {
       { headers: { 'X-API-Key': state.apiKey } }
     );
 
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) {
+      throw await readApiError(res);
+    }
     const data = await res.json();
+    updateQuotaStatusFromResponse(res);
 
     let html = '<div style="margin-top:2rem">';
     if (data.recommendations && data.recommendations.length) {
@@ -930,6 +972,9 @@ async function getBudget() {
     document.getElementById('budgetResult').innerHTML = html;
   } catch (err) {
     showAlert('budgetError', 'Could not load budget: ' + err.message);
+    if (err.quotaMessage) {
+      setDemoQuotaStatus(err.quotaMessage);
+    }
   } finally {
     hideSpinner('budgetSpinner');
   }
@@ -948,6 +993,101 @@ function showAlert(id, msg) {
 }
 function hideAlert(id) {
   document.getElementById(id).classList.remove('show');
+}
+
+function syncDemoModeUi() {
+  const isDemo = state.apiKey === DEMO_API_KEY;
+  const badge = document.getElementById('demoModeBadge');
+  if (badge) {
+    badge.style.display = isDemo ? 'inline-block' : 'none';
+  }
+  if (!isDemo) {
+    setDemoQuotaStatus('');
+  }
+}
+
+function setDemoQuotaStatus(message) {
+  const el = document.getElementById('demoQuotaStatus');
+  if (!el) return;
+  if (message) {
+    el.textContent = message;
+    el.style.display = 'block';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
+function formatQuotaMessage(quota) {
+  if (!quota || typeof quota !== 'object') return '';
+  const minute = quota.minute || quota;
+  const parts = [];
+  if (minute && typeof minute.remaining === 'number' && typeof minute.limit === 'number') {
+    parts.push(`${minute.remaining}/${minute.limit} requests remaining this minute`);
+  }
+  if (quota.day && typeof quota.day.remaining === 'number' && typeof quota.day.limit === 'number') {
+    parts.push(`${quota.day.remaining}/${quota.day.limit} requests remaining today`);
+  }
+  return parts.join(' · ');
+}
+
+function readQuotaFromHeaders(res) {
+  const minuteRemaining = res.headers.get('X-Demo-Requests-Minute-Remaining');
+  const minuteLimit = res.headers.get('X-Demo-Requests-Minute-Limit');
+  const dayRemaining = res.headers.get('X-Demo-Requests-Day-Remaining');
+  const dayLimit = res.headers.get('X-Demo-Requests-Day-Limit');
+
+  if (minuteRemaining === null || minuteLimit === null) return null;
+
+  const minuteRemainingNum = Number(minuteRemaining);
+  const minuteLimitNum = Number(minuteLimit);
+  const dayRemainingNum = dayRemaining === null ? null : Number(dayRemaining);
+  const dayLimitNum = dayLimit === null ? null : Number(dayLimit);
+
+  return {
+    minute: {
+      remaining: Number.isFinite(minuteRemainingNum) ? minuteRemainingNum : 0,
+      limit: Number.isFinite(minuteLimitNum) ? minuteLimitNum : 0,
+    },
+    day: dayRemainingNum !== null && dayLimitNum !== null && Number.isFinite(dayRemainingNum) && Number.isFinite(dayLimitNum)
+      ? {
+          remaining: dayRemainingNum,
+          limit: dayLimitNum,
+        }
+      : null,
+  };
+}
+
+function updateQuotaStatusFromResponse(res, quotaOverride) {
+  if (state.apiKey !== DEMO_API_KEY) return;
+  const quotaMessage = formatQuotaMessage(quotaOverride || readQuotaFromHeaders(res));
+  setDemoQuotaStatus(quotaMessage);
+}
+
+async function readApiError(res) {
+  const text = await res.text();
+  let payload = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch (e) {
+    payload = null;
+  }
+
+  const detailValue = payload ? payload.detail : null;
+  const detail = typeof detailValue === 'string'
+    ? detailValue
+    : detailValue && typeof detailValue === 'object' && typeof detailValue.detail === 'string'
+      ? detailValue.detail
+      : (text || res.statusText || 'API error');
+  const error = new Error(`${res.status}: ${detail}`);
+  if (payload && payload.quota) {
+    error.quotaMessage = formatQuotaMessage(payload.quota);
+  } else if (detailValue && typeof detailValue === 'object' && detailValue.quota) {
+    error.quotaMessage = formatQuotaMessage(detailValue.quota);
+  } else if (state.apiKey === DEMO_API_KEY) {
+    error.quotaMessage = formatQuotaMessage(readQuotaFromHeaders(res));
+  }
+  return error;
 }
 
 function hashCode(s) {
