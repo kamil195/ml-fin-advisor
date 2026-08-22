@@ -169,8 +169,33 @@ def _get_feature_columns(df: pd.DataFrame) -> list[str]:
     return cols
 
 
-def temporal_split(df: pd.DataFrame, val_months: int = 2, test_months: int = 2):
-    """Split data temporally into train / val / test."""
+def temporal_split(
+    df: pd.DataFrame,
+    val_months: int = 2,
+    test_months: int = 2,
+    min_samples_per_class: int = 5,
+):
+    """Split data temporally into train / val / test.
+
+    Applies a minimum-samples-per-class floor first: categories with fewer
+    than ``min_samples_per_class`` rows are dropped (with a warning) because
+    such rare classes are the ones most likely to be isolated into a single
+    temporal window. After the time cut is applied, we verify that every
+    category retained in val/test is also present in the training window;
+    if not, a clear error is raised instead of letting LightGBM/XGBoost fail
+    on an unseen label at eval time (the served-path analogue of the MLP-path
+    bug).
+    """
+    if min_samples_per_class > 0 and "category_l2" in df.columns:
+        counts = df["category_l2"].value_counts()
+        rare = counts[counts < min_samples_per_class].index.tolist()
+        if rare:
+            logger.warning(
+                "Skipping %d rare categories (< %d samples each): %s",
+                len(rare), min_samples_per_class, rare,
+            )
+            df = df[~df["category_l2"].isin(rare)]
+
     max_dt = df["timestamp"].max()
     test_cut = max_dt - pd.DateOffset(months=test_months)
     val_cut = test_cut - pd.DateOffset(months=val_months)
@@ -178,6 +203,21 @@ def temporal_split(df: pd.DataFrame, val_months: int = 2, test_months: int = 2):
     train = df[df["timestamp"] < val_cut].copy()
     val = df[(df["timestamp"] >= val_cut) & (df["timestamp"] < test_cut)].copy()
     test = df[df["timestamp"] >= test_cut].copy()
+
+    # ── Served-path guard ────────────────────────────────────────────
+    # A class that appears in val/test but not in train cannot be learned,
+    # and LightGBM/XGBoost will fail on the unseen label during eval-set
+    # validation or 5-fold CV. Surface a clear error rather than that.
+    if "category_l2" in df.columns:
+        train_classes = set(train["category_l2"].unique())
+        for name, split in (("val", val), ("test", test)):
+            missing = set(split["category_l2"].unique()) - train_classes
+            if missing:
+                raise ValueError(
+                    f"temporal_split: categories {sorted(missing)} appear in "
+                    f"{name} but not in the training window. Raise "
+                    "min_samples_per_class or extend history length."
+                )
 
     logger.info("Temporal split → train %d | val %d | test %d", len(train), len(val), len(test))
     return train, val, test
