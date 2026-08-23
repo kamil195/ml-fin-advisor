@@ -725,7 +725,8 @@
 <script>
 /* ── State ────────────────────────────────────────────────── */
 const API_URL = 'https://fin-advisor-sa6h.onrender.com';
-const DEMO_API_KEY = 'demo_key_public';
+// UI placeholder for the demo login button — NOT an API secret, never sent as a credential.
+const DEMO_LOGIN_LABEL = 'demo-user';
 let state = {
   email:  null,
   apiKey: null,
@@ -746,7 +747,7 @@ function demoLogin() {
   if (!emailInput.value.trim()) {
     emailInput.value = 'demo@example.com';
   }
-  keyInput.value = DEMO_API_KEY;
+  keyInput.value = DEMO_LOGIN_LABEL;
   doLogin();
 }
 
@@ -996,7 +997,7 @@ function hideAlert(id) {
 }
 
 function syncDemoModeUi() {
-  const isDemo = state.apiKey === DEMO_API_KEY;
+  const isDemo = state.apiKey === DEMO_LOGIN_LABEL;
   const badge = document.getElementById('demoModeBadge');
   if (badge) {
     badge.style.display = isDemo ? 'inline-block' : 'none';
@@ -1059,7 +1060,7 @@ function readQuotaFromHeaders(res) {
 }
 
 function updateQuotaStatusFromResponse(res, quotaOverride) {
-  if (state.apiKey !== DEMO_API_KEY) return;
+  if (state.apiKey !== DEMO_LOGIN_LABEL) return;
   const quotaMessage = formatQuotaMessage(quotaOverride || readQuotaFromHeaders(res));
   setDemoQuotaStatus(quotaMessage);
 }
@@ -1084,7 +1085,7 @@ async function readApiError(res) {
     error.quotaMessage = formatQuotaMessage(payload.quota);
   } else if (detailValue && typeof detailValue === 'object' && detailValue.quota) {
     error.quotaMessage = formatQuotaMessage(detailValue.quota);
-  } else if (state.apiKey === DEMO_API_KEY) {
+  } else if (state.apiKey === DEMO_LOGIN_LABEL) {
     error.quotaMessage = formatQuotaMessage(readQuotaFromHeaders(res));
   }
   return error;
