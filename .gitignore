@@ -89,3 +89,7 @@ customer-validation/
 
 # Local frontend folder
 # frontend/  (kept local previously) — now tracked again
+
+.claude/
+_*.ps1
+_*.txt
