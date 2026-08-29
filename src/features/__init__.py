@@ -16,7 +16,7 @@ feature_store
 """
 
 from src.features.behavioral_features import extract_behavioral_features
-from src.features.numerical_features import extract_numerical_features
+from src.features.numerical_features import calculate_velocity, extract_numerical_features
 from src.features.temporal_features import extract_temporal_features
 from src.features.text_features import extract_text_features
 
@@ -25,4 +25,5 @@ __all__ = [
     "extract_numerical_features",
     "extract_temporal_features",
     "extract_text_features",
+    "calculate_velocity",
 ]

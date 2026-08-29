@@ -20,7 +20,7 @@ import sys
 import time
 import warnings
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -142,7 +142,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # Save to feature store
     store_dir = PROJECT_ROOT / "data" / "feature_store"
     store_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     store_path = store_dir / f"features_{ts}.parquet"
     features.to_parquet(store_path, index=False)
     logger.info("  Saved → %s", store_path)
@@ -877,7 +877,7 @@ def log_to_mlflow(
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment("fin-advisor-v1")
 
-        with mlflow.start_run(run_name=f"pipeline_{datetime.utcnow():%Y%m%d_%H%M}") as run:
+        with mlflow.start_run(run_name=f"pipeline_{datetime.now(timezone.utc):%Y%m%d_%H%M}") as run:
             # ── Parameters ────────────────────────────────────────────
             mlflow.log_param("n_features", len(clf_result.feature_cols))
             mlflow.log_param("n_classes", len(clf_result.label_encoder.classes_))
@@ -1053,7 +1053,7 @@ def main():
 
     print("\n" + "=" * 78)
     print("           ML FIN-ADVISOR — END-TO-END PIPELINE")
-    print(f"           {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC")
+    print(f"           {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S} UTC")
     print("=" * 78 + "\n")
 
     # § 1 — Data generation

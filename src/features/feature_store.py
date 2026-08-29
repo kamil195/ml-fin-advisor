@@ -8,7 +8,7 @@ Provides a local-file fallback when Feast is not configured.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -114,7 +114,7 @@ class FeatureStoreClient:
         if self._feast_store is not None:
             self._feast_store.materialize(
                 start_date=start_date or datetime(2020, 1, 1),
-                end_date=end_date or datetime.utcnow(),
+                end_date=end_date or datetime.now(timezone.utc),
             )
             logger.info("Feast materialisation complete.")
         else:

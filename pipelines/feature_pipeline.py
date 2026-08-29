@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -184,7 +184,7 @@ class FeaturePipeline:
         output_dir = Path(self.config.feature_store_path)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         output_path = output_dir / f"features_{ts}.parquet"
 
         features.to_parquet(output_path, index=False)
@@ -196,14 +196,14 @@ class FeaturePipeline:
     def run(self, raw_data_path: str | Path | None = None) -> Path:
         """Execute the complete feature pipeline."""
         logger.info("═══ Feature Pipeline START ═══")
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
 
         df = self.ingest(raw_data_path)
         df = self.validate(df)
         features = self.extract_features(df)
         output_path = self.save_features(features)
 
-        elapsed = (datetime.utcnow() - start).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         logger.info("═══ Feature Pipeline DONE (%.1f s) ═══", elapsed)
         return output_path
 

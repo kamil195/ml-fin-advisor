@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -263,7 +263,7 @@ class InferencePipeline:
         output_dir = Path(self.config.output_path)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
         if classifications is not None and not classifications.empty:
             path = output_dir / f"classifications_{ts}.parquet"
@@ -285,7 +285,7 @@ class InferencePipeline:
     def run(self) -> None:
         """Execute the complete batch inference pipeline."""
         logger.info("═══ Inference Pipeline START ═══")
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
 
         # Load models & features
         models = self.load_models()
@@ -309,7 +309,7 @@ class InferencePipeline:
         # Save
         self.save_results(classifications, forecasts, budgets)
 
-        elapsed = (datetime.utcnow() - start).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         logger.info("═══ Inference Pipeline DONE (%.1f s) ═══", elapsed)
 
 

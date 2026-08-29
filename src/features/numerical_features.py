@@ -75,6 +75,52 @@ def rolling_spend(
     return result
 
 
+def calculate_velocity(
+    df: pd.DataFrame,
+    window_minutes: int = 10,
+    time_column: str = "timestamp",
+) -> pd.Series:
+    """
+    Per-user transaction velocity: number of *preceding* transactions within
+    a trailing time window.
+
+    Velocity is the classic fraud signal — a burst of transactions inside a
+    short window is a red flag regardless of individual amounts. This is used
+    both as a batch feature and by the serving layer's fraud assessment.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must contain ``user_id`` and the time column.
+    window_minutes : int
+        Trailing window width. Defaults to 10 minutes.
+    time_column : str
+        Column holding transaction timestamps (naive or tz-aware).
+
+    Returns
+    -------
+    pd.Series
+        Integer count of prior transactions within the window, aligned to
+        ``df.index``. A transaction with no history gets 0 (the current row
+        is excluded, so a single transaction is never flagged).
+    """
+    work = df.sort_values(["user_id", time_column])
+    result = pd.Series(0, index=df.index, dtype=int)
+
+    for uid, grp in work.groupby("user_id", sort=False):
+        idx = grp.index
+        ts = pd.to_datetime(grp[time_column], utc=True)
+        # rolling count of txns in the trailing window (includes the current
+        # row), then subtract 1 so the current row is excluded (prior activity
+        # within the window only)
+        ones = pd.Series(1, index=pd.DatetimeIndex(ts))
+        counts = ones.rolling(f"{window_minutes}min", min_periods=1).sum()
+        prior = (counts - 1).clip(lower=0)
+        result.loc[idx] = prior.astype(int).values
+
+    return result.reindex(df.index).fillna(0).astype(int)
+
+
 def txn_count_24h(df: pd.DataFrame) -> pd.Series:
     """
     Number of transactions in the preceding 24 hours for each user.

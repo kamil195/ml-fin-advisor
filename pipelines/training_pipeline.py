@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -235,7 +235,7 @@ class TrainingPipeline:
             mlflow.set_tracking_uri(self.config.mlflow_tracking_uri)
             mlflow.set_experiment(self.config.experiment_name)
 
-            with mlflow.start_run(run_name=f"train_{datetime.utcnow():%Y%m%d_%H%M}"):
+            with mlflow.start_run(run_name=f"train_{datetime.now(timezone.utc):%Y%m%d_%H%M}"):
                 # Log all metrics
                 for model_name, model_metrics in metrics.items():
                     for k, v in model_metrics.items():
@@ -263,7 +263,7 @@ class TrainingPipeline:
     def run(self) -> dict[str, Any]:
         """Execute the complete training pipeline."""
         logger.info("═══ Training Pipeline START ═══")
-        start = datetime.utcnow()
+        start = datetime.now(timezone.utc)
 
         # 1. Load features
         features = self.load_features()
@@ -304,7 +304,7 @@ class TrainingPipeline:
         if metrics:
             self.register_models(metrics)
 
-        elapsed = (datetime.utcnow() - start).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - start).total_seconds()
         logger.info("═══ Training Pipeline DONE (%.1f s) ═══", elapsed)
 
         return metrics

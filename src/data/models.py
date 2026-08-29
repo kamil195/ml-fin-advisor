@@ -7,7 +7,7 @@ Implements the raw transaction schema from SPEC §5.1 and related models.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -171,7 +171,7 @@ class TransactionBatch(BaseModel):
         description="Source identifier (e.g., 'plaid', 'csv_upload', 'manual').",
     )
     ingested_at: datetime = Field(
-        default_factory=datetime.utcnow,
+        default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp when the batch was ingested.",
     )
 
@@ -205,6 +205,29 @@ class ClassificationResult(BaseModel):
     top_3: list[CategoryPrediction] = Field(max_length=3)
     is_impulse: bool = False
     impulse_score: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
+
+
+# ── Fraud Analysis ────────────────────────────────────────────────────────────
+
+
+class FraudAnalysis(BaseModel):
+    """
+    Fraud-risk assessment for a single transaction (SPEC §11.2.4).
+
+    Built from velocity features (rolling transaction counts over short
+    windows) plus transparent rule-based heuristics on amount, channel and
+    time of day. No opaque model — every flag maps to a specific signal.
+    """
+
+    fraud_score: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
+    velocity_flags: list[str] = Field(
+        default_factory=list,
+        description="Human-readable velocity/anomaly signals detected.",
+    )
+    is_suspicious: bool = Field(
+        default=False,
+        description="True when fraud_score crosses the suspicion threshold.",
+    )
 
 
 # ── Forecast Result ────────────────────────────────────────────────────────────

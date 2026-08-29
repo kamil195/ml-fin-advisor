@@ -12,14 +12,17 @@ import math
 from datetime import datetime
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from src.data.models import ClassificationResult, Transaction
+from src.data.models import ClassificationResult, FraudAnalysis, Transaction
+from src.features.numerical_features import calculate_velocity
 from src.utils.constants import (
     CategoryL1,
     CategoryL2,
     CATEGORY_HIERARCHY,
+    Channel,
     DISCRETIONARY_CATEGORIES,
     lookup_category_by_mcc,
 )
@@ -62,6 +65,14 @@ class ClassifyResponse(ClassificationResult):
     anchor_rule: str = Field(
         default="",
         description="Human-readable IF-THEN anchor rule",
+    )
+    fraud_analysis: FraudAnalysis = Field(
+        default_factory=lambda: FraudAnalysis(velocity_flags=["no_history"]),
+        description=(
+            "Rule-based fraud-risk assessment: velocity counts, flags, score, "
+            "and an is_suspicious verdict. Built from the transaction's own "
+            "velocity window (no cross-user data)."
+        ),
     )
 
 
@@ -214,6 +225,13 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
         )
         impulse_score = 0.7 if is_impulse else 0.1
 
+        # ── 11. Fraud-risk assessment (velocity + rule-based signals) ─────
+        fraud_analysis = _compute_fraud_analysis(
+            txn,
+            velocity_window_minutes=10,
+            max_expected_window=3,
+        )
+
         return ClassifyResponse(
             category_l1=l1,
             category_l2=l2,
@@ -224,6 +242,7 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
             shap_features=shap_features,
             attribution_method=attribution_method,
             anchor_rule=anchor_rule,
+            fraud_analysis=fraud_analysis,
         )
 
     except Exception as exc:
@@ -353,3 +372,79 @@ def _build_anchor_rule(
 
     rule = f"IF {' AND '.join(conditions)} THEN category = {predicted_cat.value}"
     return rule
+
+
+def _compute_fraud_analysis(
+    txn: Transaction,
+    history: list[Transaction] | None = None,
+    velocity_window_minutes: int = 10,
+    max_expected_window: int = 3,
+) -> FraudAnalysis:
+    """
+    Rule-based fraud-risk assessment for a single transaction.
+
+    Uses ``calculate_velocity`` (rolling count of prior transactions inside a
+    short window) when ``history`` is supplied, plus transparent heuristics on
+    amount, channel and time-of-day. The classify request currently carries a
+    single transaction, so velocity is 0 unless combined with a batch view —
+    the flags below therefore reflect amount/channel/timing risk factors that
+    are meaningful without cross-transaction context.
+
+    Cache-compatible: every field is JSON-serialisable and the result never
+    depends on shared state between requests.
+    """
+    flags: list[str] = []
+    velocity_count = 0
+
+    if history:
+        history_df = pd.DataFrame(
+            [
+                {"user_id": t.user_id, "timestamp": t.timestamp}
+                for t in history
+            ]
+        )
+        if not history_df.empty:
+            prior = calculate_velocity(
+                history_df, window_minutes=velocity_window_minutes
+            )
+            velocity_count = int(prior.max())
+
+    # Rule-based signals — transparent, no PII
+    amount = abs(txn.amount)
+    hour = txn.timestamp.hour
+
+    if amount >= 10_000:
+        flags.append("high_amount")
+    if txn.channel == Channel.ATM and amount >= 2_000:
+        flags.append("large_atm_withdrawal")
+    if amount >= 5_000 and (hour >= 22 or hour <= 4):
+        flags.append("late_night_high_value")
+    if amount <= 0:
+        flags.append("non_spend_amount")
+    if velocity_count > max_expected_window:
+        flags.append(f"velocity_burst_{velocity_window_minutes}m")
+
+    # Score: start 0, add signal weights, clamp to [0,1].
+    # Hard flags (high amount, ATM, velocity burst) are each sufficient to
+    # cross the suspicion threshold on their own; softer signals stack.
+    score = 0.0
+    if "high_amount" in flags:
+        score += 0.55
+    if "large_atm_withdrawal" in flags:
+        score += 0.55
+    if "late_night_high_value" in flags:
+        score += 0.35
+    if "non_spend_amount" in flags:
+        score += 0.05
+    if velocity_count > max_expected_window:
+        # velocity burst is the strongest single indicator
+        score += 0.55
+
+    fraud_score = round(min(score, 1.0), 4)
+    is_suspicious = fraud_score >= 0.5
+
+    return FraudAnalysis(
+        fraud_score=fraud_score,
+        velocity_flags=flags,
+        is_suspicious=is_suspicious,
+    )

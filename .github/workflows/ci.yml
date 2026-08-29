@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # requirements-serve.txt is the actual serving/runtime dependency set;
+          # requirements.txt holds the Streamlit demo + data-science extras.
+          pip install -r requirements-serve.txt
+          pip install -r requirements-dev.txt
+
+      - name: Lint (compile + style)
+        run: |
+          python -m compileall -q src pipelines run_pipeline.py tests
+          pip install pyflakes
+          python -m pyflakes src tests pipelines run_pipeline.py
+
+      - name: Run unit tests
+        run: |
+          python -m pytest -q tests/unit
+
+      - name: Sanity — import serving app
+        run: |
+          python -c "from src.serving.app import create_app; app = create_app(); print('serving app OK')"
