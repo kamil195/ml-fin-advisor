@@ -9,9 +9,12 @@ with numerical/temporal features.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+if TYPE_CHECKING:  # pragma: no cover
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -105,8 +108,6 @@ class TextTower:
 
     def encode_from_df(self, df: "pd.DataFrame") -> np.ndarray:
         """Build input strings from DataFrame columns and encode."""
-        import pandas as pd
-
         texts = (
             df["merchant_name"].fillna("")
             + " "
