@@ -26,17 +26,32 @@ def log_amount(amount: pd.Series) -> pd.Series:
 
 def amount_zscore_user(df: pd.DataFrame) -> pd.Series:
     """
-    Z-score of transaction amount within each user's historical distribution.
+    Z-score of each transaction amount against the user's *prior*
+    transactions only (expanding mean/std within the user's time-sorted
+    history).
+
+    This is temporal-leakage-safe: a transaction's feature never depends on
+    later transactions. The first transaction of a user (no prior history)
+    receives 0.0, matching the serving layer where single-transaction
+    requests have no history.
     """
 
-    def _zscore(s: pd.Series) -> pd.Series:
-        mu = s.mean()
-        sigma = s.std(ddof=0)
-        if sigma == 0 or np.isnan(sigma):
-            return pd.Series(0.0, index=s.index)
-        return (s - mu) / sigma
+    def _cumulative_zscore(s: pd.Series) -> pd.Series:
+        vals = s.astype(float)
+        # All values before the current row (shift so the current value is excluded)
+        prior = vals.shift(1)
+        # Expanding mean/std over prior values only. min_periods=2 means a
+        # row with fewer than two prior transactions gets NaN → 0.0 below.
+        prior_mean = prior.expanding(min_periods=2).mean()
+        prior_std = prior.expanding(min_periods=2).std(ddof=0)
+        out = (vals - prior_mean) / prior_std
+        # No prior history / single prior amount (zero std) → 0.0
+        return out.where(
+            prior_mean.notna() & prior_std.notna() & (prior_std > 0),
+            0.0,
+        ).fillna(0.0)
 
-    return df.groupby("user_id")["amount"].transform(_zscore)
+    return df.groupby("user_id")["amount"].transform(_cumulative_zscore)
 
 
 def amount_pct_of_income(

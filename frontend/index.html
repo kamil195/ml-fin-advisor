@@ -1,482 +1,3 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>FinSight AI</title>
-    <style>
-      /* Minimal helper styles only for spinner and basic layout; do not change existing design elements */
-      .hidden{display:none}
-      #app{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-      nav {display:flex;gap:12px;padding:12px}
-      .page{display:none;padding:16px}
-      .page.active{display:block}
-      .spinner{position:fixed;right:16px;bottom:16px;background:#111;color:#fff;padding:8px;border-radius:6px}
-      .alert{background:#fee;border:color:#a00;padding:8px;border-radius:6px;margin:8px 0}
-      button.retry{margin-left:8px}
-      /* Responsive: collapse nav on small screens */
-      #nav-toggle{display:none;background:transparent;border:none;font-size:20px}
-      @media (max-width:720px){
-        nav{display:none}
-        #nav-toggle{display:inline-block}
-      }
-      /* SHAP list */
-      .shap-list{margin-top:8px}
-      .shap-item{display:flex;align-items:center;gap:8px;margin:6px 0}
-      .shap-bar{height:10px;border-radius:4px;background:#ddd;flex:1;position:relative;overflow:hidden}
-      .shap-bar-inner{height:100%;position:absolute;left:0;top:0}
-      .shap-pos{background:#4caf50}
-      .shap-neg{background:#f44336}
-    </style>
-  </head>
-  <body>
-    <div id="app">
-      <nav>
-        <button id="nav-toggle" class="hidden" aria-label="Toggle navigation" style="margin-right:8px">☰</button>
-        <a href="#" data-target="dashboard">Dashboard</a>
-        <a href="#" data-target="transactions">Transactions</a>
-        <a href="#" data-target="forecast">Forecast</a>
-        <a href="#" data-target="budget">Budget</a>
-        <a href="#" data-target="settings">Settings</a>
-      </nav>
-
-      <main>
-        <section id="dashboard" class="page">
-          <h2>Dashboard</h2>
-          <label>User ID: <input id="dashboard-user-id" placeholder="user_id" /></label>
-          <div>
-            <button id="dashboard-load">Load Forecast</button>
-          </div>
-          <div id="dashboard-output"></div>
-        </section>
-
-        <section id="transactions" class="page">
-          <h2>Transactions</h2>
-          <label>Transaction text:</label>
-          <div style="margin:8px 0">
-            <button class="btn-sample" data-sample="Netflix subscription at NETFLIX">NETFLIX</button>
-            <button class="btn-sample" data-sample="Fuel purchase at SHELL">SHELL</button>
-            <button class="btn-sample" data-sample="Grocery at WHOLE FOODS">WHOLE FOODS</button>
-            <button class="btn-sample" data-sample="Ride with UBER">UBER</button>
-            <button class="btn-sample" data-sample="Online purchase at AMAZON">AMAZON</button>
-          </div>
-          <textarea id="txn-text" rows="4" style="width:100%"></textarea>
-          <div>
-            <button id="txn-classify">Classify</button>
-          </div>
-          <div id="txn-output"></div>
-        </section>
-
-        <section id="forecast" class="page">
-          <h2>Forecast</h2>
-          <label>User ID: <input id="forecast-user-id" placeholder="user_id" /></label>
-          <div>
-            <button id="forecast-load">Load Forecast</button>
-            <label style="margin-left:8px">Range:
-              <select id="forecast-range">
-                <option value="7">Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-              </select>
-            </label>
-            <button id="forecast-export" class="hidden">Export as CSV</button>
-          </div>
-          <div id="forecast-output"></div>
-        </section>
-
-        <section id="budget" class="page">
-          <h2>Budget</h2>
-          <label>User ID: <input id="budget-user-id" placeholder="user_id" /></label>
-          <div>
-            <button id="budget-load">Load Budget</button>
-            <button id="budget-export" class="hidden">Export as CSV</button>
-          </div>
-          <div id="budget-output"></div>
-        </section>
-
-        <section id="settings" class="page">
-          <h2>Settings</h2>
-          <div>
-            <label>API Key: <input id="api-key-input" type="password" style="width:60%"/></label>
-            <button id="save-api-key">Save</button>
-            <button id="copy-api-key">Copy API Key</button>
-            <span id="api-status" style="margin-left:12px;font-weight:600"></span>
-          </div>
-        </section>
-      </main>
-
-      <div id="spinner" class="spinner hidden">Loading...</div>
-    </div>
-
-    <!-- Sentry initialization (replace DSN with your project's DSN) -->
-    <script src="https://browser.sentry-cdn.com/7.61.0/bundle.min.js" crossorigin="anonymous"></script>
-    <script>
-      // Initialize Sentry (basic, free-tier). Replace 'YOUR_SENTRY_DSN' with your DSN.
-      if(window.Sentry){
-        try{
-          Sentry.init({
-            dsn: 'YOUR_SENTRY_DSN',
-            integrations: [new Sentry.BrowserTracing()],
-            tracesSampleRate: 0.0 // set to 0 for minimal sampling; increase for performance tracing
-          });
-        }catch(e){ console.warn('Sentry init failed', e) }
-      }
-    </script>
-
-    <script>
-    (function(){
-      const BASE = 'https://fin-advisor-sa6h.onrender.com';
-
-      // simple SPA nav
-      const links = document.querySelectorAll('nav a[data-target]');
-      links.forEach(a=>a.addEventListener('click', e=>{
-        e.preventDefault();
-        showPage(a.dataset.target);
-      }));
-      function showPage(id){
-        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-        const el = document.getElementById(id);
-        if(el) el.classList.add('active');
-      }
-      // default
-      showPage('dashboard');
-
-      // spinner and helpers
-      const spinner = document.getElementById('spinner');
-      function showSpinner(){spinner.classList.remove('hidden')}
-      function hideSpinner(){spinner.classList.add('hidden')}
-
-      // button state helpers (preserve original text)
-      function setButtonLoading(btn, isLoading, loadingText){
-        if(!btn) return;
-        if(isLoading){
-          btn.dataset._orig = btn.innerHTML;
-          btn.disabled = true;
-          btn.innerHTML = loadingText || 'Loading...';
-        } else {
-          btn.disabled = false;
-          if(btn.dataset._orig) { btn.innerHTML = btn.dataset._orig; delete btn.dataset._orig }
-        }
-      }
-
-      // inline message helpers
-      function clearSectionMessages(sec){
-        const existing = sec.querySelectorAll('.inline-msg');
-        existing.forEach(n=>n.remove());
-      }
-      function showInlineMessage(sec, message, type='info'){
-        clearSectionMessages(sec);
-        const d = document.createElement('div');
-        d.className = 'inline-msg';
-        d.style.marginTop = '8px';
-        if(type==='error') d.className += ' alert';
-        d.textContent = message;
-        sec.insertBefore(d, sec.firstChild);
-      }
-
-      // No hardcoded API key — require users to enter their own key.
-      const HARDCODED_API_KEY = '';
-      function getApiKey(){
-        // localStorage override wins; otherwise return empty string
-        return localStorage.getItem('fin_api_key') || HARDCODED_API_KEY || '';
-      }
-      function setApiKey(v){if(v) localStorage.setItem('fin_api_key',v); else localStorage.removeItem('fin_api_key'); updateApiStatus();}
-      function updateApiStatus(){
-        const status = document.getElementById('api-status');
-        const key = getApiKey();
-        status.textContent = key ? 'Connected' : 'Not connected';
-      }
-      updateApiStatus();
-
-      // Tooltip for copy confirmation
-      function showCopiedTooltip(targetEl){
-        const tip = document.createElement('div');
-        tip.textContent = 'Copied!';
-        tip.style.position = 'fixed';
-        tip.style.padding = '6px 10px';
-        tip.style.background = '#111';
-        tip.style.color = '#fff';
-        tip.style.borderRadius = '6px';
-        tip.style.fontSize = '13px';
-        tip.style.zIndex = 9999;
-        document.body.appendChild(tip);
-        const r = targetEl.getBoundingClientRect();
-        tip.style.left = (r.left + (r.width/2) - (tip.offsetWidth/2)) + 'px';
-        tip.style.top = (r.top - 36) + 'px';
-        // reposition after render to center properly
-        requestAnimationFrame(()=>{
-          const rr = targetEl.getBoundingClientRect();
-          tip.style.left = (rr.left + (rr.width/2) - (tip.offsetWidth/2)) + 'px';
-        });
-        setTimeout(()=>{ tip.style.transition='opacity 180ms'; tip.style.opacity='0'; }, 800);
-        setTimeout(()=>tip.remove(), 1100);
-      }
-
-      // Generic fetch wrapper with api key, loading and error handling
-      async function apiFetch(path, opts={}){
-        const headers = opts.headers || {};
-        const key = getApiKey();
-        if(key) headers['X-API-Key'] = key;
-        opts.headers = Object.assign({'Content-Type':'application/json'}, headers);
-        showSpinner();
-        try{
-          const res = await fetch(BASE + path, opts);
-          if(!res.ok){
-            // handle 401 specifically with a clear message
-            if(res.status === 401){
-              throw new Error('Invalid API Key. Please check your Settings.');
-            }
-            const text = await res.text().catch(()=>res.statusText);
-            const err = new Error(text || res.statusText || 'API error');
-            err.status = res.status;
-            throw err;
-          }
-          const ct = res.headers.get('content-type')||'';
-          if(ct.includes('application/json')) return await res.json();
-          return await res.text();
-        }finally{hideSpinner()}
-      }
-
-      // Dashboard & Forecast (both call /v1/forecast/{user_id})
-      async function loadForecastTo(elId, userId, btn){
-        const out = document.getElementById(elId);
-        out.innerHTML = '';
-        const section = out.closest('.page') || out.parentElement;
-        clearSectionMessages(section);
-        if(!userId){ showInlineMessage(section, 'Please provide a user id.', 'error'); return }
-        setButtonLoading(btn, true, 'Loading forecast...');
-        try{
-          // include optional date range (days) if present
-          const daysEl = document.getElementById('forecast-range');
-          const days = daysEl ? daysEl.value : '';
-          let path = '/v1/forecast/' + encodeURIComponent(userId);
-          if(days) path += '?horizon=' + encodeURIComponent(days);
-          const data = await apiFetch(path);
-          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
-          // store last fetched forecast for export
-          window._lastForecastData = data;
-          document.getElementById('forecast-export').classList.remove('hidden');
-        }catch(err){
-          renderError(out, err.message || 'Failed to load forecast', ()=>loadForecastTo(elId,userId,btn));
-        }finally{
-          setButtonLoading(btn, false);
-        }
-      }
-
-      // Budget
-      async function loadBudget(userId, btn){
-        const out = document.getElementById('budget-output');
-        out.innerHTML = '';
-        const section = out.closest('.page') || out.parentElement;
-        clearSectionMessages(section);
-        if(!userId){ showInlineMessage(section, 'Please provide a user id.', 'error'); return }
-        setButtonLoading(btn, true, 'Loading budget...');
-        try{
-          const data = await apiFetch('/v1/budget/' + encodeURIComponent(userId));
-          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
-          window._lastBudgetData = data;
-          document.getElementById('budget-export').classList.remove('hidden');
-        }catch(err){
-          renderError(out, err.message || 'Failed to load budget', ()=>loadBudget(userId,btn));
-        }finally{
-          setButtonLoading(btn, false);
-        }
-      }
-
-      // Transactions / classify
-      async function classifyTransaction(btn){
-        const out = document.getElementById('txn-output');
-        out.innerHTML = '';
-        const section = out.closest('.page') || out.parentElement;
-        clearSectionMessages(section);
-        const text = document.getElementById('txn-text').value || '';
-        if(!text.trim()){ showInlineMessage(section, 'Please enter transaction text.', 'error'); return }
-        if(text.length > 2000){ showInlineMessage(section, 'Transaction text is too long (max 2000 chars).', 'error'); return }
-        setButtonLoading(btn, true, 'Classifying...');
-        try{
-          const data = await apiFetch('/v1/classify', {
-            method:'POST',
-            body: JSON.stringify({
-              transaction: {
-                user_id: 'demo_user',
-                timestamp: new Date().toISOString(),
-                amount: -42.5,
-                currency: 'USD',
-                merchant_name: text.trim().slice(0, 500),
-                merchant_mcc: 5999,
-                account_type: 'CHECKING',
-                channel: 'ONLINE',
-                raw_description: text.trim().slice(0, 2000),
-              }
-            })
-          });
-          out.innerHTML = '<pre>'+escapeHtml(JSON.stringify(data,null,2))+'</pre>';
-        }catch(err){
-          renderError(out, err.message || 'Failed to classify', ()=>classifyTransaction(btn));
-        }finally{
-          setButtonLoading(btn, false);
-        }
-      }
-
-      function renderError(container, message, retryFn){
-        const div = document.createElement('div');
-        div.className = 'alert';
-        div.innerHTML = '<strong>Error:</strong> '+escapeHtml(message);
-        const btn = document.createElement('button');
-        btn.textContent = 'Retry';
-        btn.className = 'retry';
-        btn.addEventListener('click', ()=>{div.remove(); retryFn();});
-        div.appendChild(btn);
-        container.appendChild(div);
-      }
-
-      // Render SHAP explanations if present in classification response
-      function renderShap(container, shap){
-        // shap can be an object {feature: value} or array of {feature,value}
-        const div = document.createElement('div');
-        div.className = 'shap-list';
-        let items = [];
-        if(Array.isArray(shap)){
-          items = shap.map(s=>({name: s.feature||s.name, value: s.value||s.score||0}));
-        } else if(shap && typeof shap === 'object'){
-          items = Object.keys(shap).map(k=>({name:k, value: shap[k]}));
-        }
-        if(items.length===0) return;
-        // sort by absolute contribution desc
-        items.sort((a,b)=>Math.abs(b.value)-Math.abs(a.value));
-        const maxAbs = Math.max(...items.map(i=>Math.abs(i.value)), 1e-6);
-        items.forEach(it=>{
-          const row = document.createElement('div');
-          row.className = 'shap-item';
-          const label = document.createElement('div'); label.style.width='140px'; label.textContent = it.name;
-          const barWrap = document.createElement('div'); barWrap.className='shap-bar';
-          const inner = document.createElement('div'); inner.className='shap-bar-inner '+(it.value>=0?'shap-pos':'shap-neg');
-          const pct = Math.min(1, Math.abs(it.value)/maxAbs);
-          inner.style.width = (pct*100)+'%';
-          inner.title = String(it.value);
-          barWrap.appendChild(inner);
-          const val = document.createElement('div'); val.style.width='80px'; val.style.textAlign='right'; val.textContent = Number(it.value).toFixed(3);
-          row.appendChild(label); row.appendChild(barWrap); row.appendChild(val);
-          div.appendChild(row);
-        });
-        container.appendChild(div);
-      }
-
-      function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
-
-      // Wire UI buttons
-      document.getElementById('dashboard-load').addEventListener('click', (e)=>{
-        const uid = document.getElementById('dashboard-user-id').value.trim();
-        loadForecastTo('dashboard-output', uid, e.currentTarget);
-      });
-      document.getElementById('forecast-load').addEventListener('click', (e)=>{
-        const uid = document.getElementById('forecast-user-id').value.trim();
-        loadForecastTo('forecast-output', uid, e.currentTarget);
-      });
-      document.getElementById('budget-load').addEventListener('click', (e)=>{
-        const uid = document.getElementById('budget-user-id').value.trim();
-        loadBudget(uid, e.currentTarget);
-      });
-      document.getElementById('txn-classify').addEventListener('click', (e)=> classifyTransaction(e.currentTarget));
-
-      // sample transaction buttons: autofill transaction text
-      document.querySelectorAll('.btn-sample').forEach(b=>{
-        b.addEventListener('click', (e)=>{
-          const sample = e.currentTarget.dataset.sample || e.currentTarget.textContent || '';
-          const ta = document.getElementById('txn-text');
-          ta.value = sample;
-          // show brief inline message
-          const sec = document.getElementById('transactions');
-          showInlineMessage(sec, 'Sample transaction inserted');
-        });
-      });
-
-      // Export CSV handlers
-      function jsonToCsv(data){
-        // handle arrays of objects or object-of-arrays/time-series
-        if(!data) return '';
-        if(Array.isArray(data)){
-          const keys = new Set(); data.forEach(r=>Object.keys(r||{}).forEach(k=>keys.add(k)));
-          const cols = Array.from(keys);
-          const rows = [cols.join(',')];
-          data.forEach(r=>{ rows.push(cols.map(c=>escapeCsv(String((r&&r[c])!=null? r[c] : '') )).join(',')) });
-          return rows.join('\n');
-        }
-        // if object with arrays (e.g., {dates:[], values:[]}) try to zip
-        const keys = Object.keys(data||{});
-        if(keys.length===0) return '';
-        // if all values are arrays of same length
-        const len = Math.max(...keys.map(k=>Array.isArray(data[k])?data[k].length:1));
-        const header = keys.join(',');
-        const rows = [header];
-        for(let i=0;i<len;i++){
-          const vals = keys.map(k=>escapeCsv(String((Array.isArray(data[k])? (data[k][i]!=null?data[k][i]:'') : data[k]))));
-          rows.push(vals.join(','));
-        }
-        return rows.join('\n');
-      }
-      function escapeCsv(s){ if(s==null) return ''; return '"'+String(s).replace(/"/g,'""')+'"'; }
-
-      function downloadCsv(filename, csv){
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      }
-
-      document.getElementById('forecast-export').addEventListener('click', ()=>{
-        const data = window._lastForecastData;
-        const csv = jsonToCsv(data);
-        if(!csv){ alert('No data to export'); return }
-        downloadCsv('forecast.csv', csv);
-      });
-      document.getElementById('budget-export').addEventListener('click', ()=>{
-        const data = window._lastBudgetData;
-        const csv = jsonToCsv(data);
-        if(!csv){ alert('No data to export'); return }
-        downloadCsv('budget.csv', csv);
-      });
-
-      // Responsive nav toggle
-      const navToggle = document.getElementById('nav-toggle');
-      if(navToggle){
-        navToggle.addEventListener('click', ()=>{
-          const nav = document.querySelector('nav');
-          if(nav.style.display==='flex' || nav.style.display==='block') nav.style.display='none'; else nav.style.display='flex';
-        });
-      }
-
-      // Settings
-      document.getElementById('save-api-key').addEventListener('click', ()=>{
-        const v = document.getElementById('api-key-input').value.trim();
-        setApiKey(v);
-        alert('API key saved locally');
-      });
-      document.getElementById('copy-api-key').addEventListener('click', async ()=>{
-        const key = localStorage.getItem('fin_api_key') || '';
-        const inputVal = document.getElementById('api-key-input').value || '';
-        const toCopy = key || inputVal;
-        if(!toCopy){ alert('No API key available to copy'); return }
-        try{
-          if(navigator.clipboard && navigator.clipboard.writeText){
-            await navigator.clipboard.writeText(toCopy);
-          } else {
-            // fallback
-            const tmp = document.createElement('textarea'); tmp.value = toCopy; document.body.appendChild(tmp); tmp.select(); document.execCommand('copy'); tmp.remove();
-          }
-          // show small tooltip near button instead of alert
-          showCopiedTooltip(document.getElementById('copy-api-key'));
-        }catch(e){ alert('Copy failed'); }
-      });
-      // populate saved key if present (masked)
-      (function populateKey(){ const k = getApiKey(); if(k) document.getElementById('api-key-input').value = k })();
-
-      // expose helpers to console for debugging (optional)
-      window.finApi = {loadForecastTo, loadBudget, classifyTransaction, getApiKey, setApiKey};
-
-    })();
-    </script>
-  </body>
-</html>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1099,6 +620,158 @@ function hashCode(s) {
   }
   return h;
 }
+
+/* ===== Decision Advisor (session-only MVP) ===== */
+(function(){
+  window.__sessionTxns = window.__sessionTxns || [];
+  window.__updSessionCount = function(){ var n=document.getElementById('adv-count'); if(n) n.textContent=String(window.__sessionTxns.length); };
+  document.addEventListener('DOMContentLoaded', window.__updSessionCount);
+  var ADV = 'https://fin-advisor-sa6h.onrender.com';
+  try { if (typeof API_URL !== 'undefined') ADV = API_URL; else if (typeof BASE !== 'undefined') ADV = BASE; } catch(e){}
+  var _f = window.fetch;
+  window.fetch = async function(u, opt){
+    opt = opt || {};
+    var url = (typeof u === 'string') ? u : (u && u.url) || '';
+    if (url.indexOf('/v1/classify') > -1 && opt.method === 'POST') {
+      var b = {}; try { b = JSON.parse(opt.body || '{}'); } catch(e){}
+      if (!b.transaction) {
+        b = { transaction: {
+          user_id: b.user_id || 'web_user',
+          timestamp: b.timestamp || new Date().toISOString(),
+          amount: Number(b.amount || 0),
+          currency: String(b.currency || 'USD').toUpperCase(),
+          merchant_name: b.merchant_name || b.merchant || b.description || '',
+          merchant_mcc: Number(b.merchant_mcc || b.mcc || 0) || 5999,
+          account_type: String(b.account_type || 'CHECKING').toUpperCase(),
+          channel: String(b.channel || 'ONLINE').toUpperCase(),
+          description: b.description || b.raw_description || b.merchant_name || ''
+        }};
+        opt = Object.assign({}, opt, { body: JSON.stringify(b) });
+      }
+      var res = await _f(u, opt);
+      try {
+        if (res.ok) {
+          var d = await res.clone().json();
+          var t = b.transaction;
+          if (d && (d.category_l2 || d.category_l1)) {
+            window.__sessionTxns.push({
+              user_id: t.user_id, timestamp: t.timestamp, amount: t.amount, currency: t.currency,
+              merchant_name: t.merchant_name, merchant_mcc: Number(t.merchant_mcc),
+              account_type: t.account_type, channel: t.channel,
+              category_l1: d.category_l1, category_l2: d.category_l2, confidence: Number(d.confidence)
+            });
+            window.__updSessionCount();
+          }
+        }
+      } catch(e){}
+      return res;
+    }
+    return _f(u, opt);
+  };
+})();
+function _advEsc(x){ return String(x).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
+function _advFmt(v){ return (typeof v === 'number') ? v.toLocaleString(undefined,{maximumFractionDigits:2}) : _advEsc(v); }
+function renderDecision(d){
+  var el = document.getElementById('adv-result');
+  var badge = d.status || d.decision_type || 'decision';
+  var cls = ({feasible:'ok', partial:'warn', infeasible:'bad'})[badge] || 'info';
+  var h = '<span class="adv-badge adv-' + cls + '">' + _advEsc(badge) + '</span>';
+  h += '<p><b>' + _advEsc(d.recommendation || '') + '</b></p>';
+  if (d.reasoning) h += '<p style="font-size:12px;color:#374151">' + _advEsc(d.reasoning) + '</p>';
+  if (d.warnings && d.warnings.length) h += '<div class="adv-warnbox"><b>Warnings</b><ul style="margin:4px 0 0 16px;padding:0">' + d.warnings.map(function(w){ return '<li>' + _advEsc(w) + '</li>'; }).join('') + '</ul></div>';
+  if (d.alternatives && d.alternatives.length) h += '<div style="margin:6px 0"><b>Alternatives</b><ul style="margin:4px 0 0 16px;padding:0;font-size:12px">' + d.alternatives.map(function(a){ return '<li>' + _advEsc(typeof a === 'string' ? a : (a.description || JSON.stringify(a))) + '</li>'; }).join('') + '</ul></div>';
+  if (d.supporting_metrics) { h += '<table class="adv-metrics">' + Object.keys(d.supporting_metrics).map(function(k){ return '<tr><td>' + _advEsc(k) + '</td><td>' + _advFmt(d.supporting_metrics[k]) + '</td></tr>'; }).join('') + '</table>'; }
+  el.innerHTML = h;
+}
+async function requestAdvice(){
+  var msg = document.getElementById('adv-msg'), box = document.getElementById('adv-result'), btn = document.getElementById('adv-btn');
+  var tx = window.__sessionTxns || [];
+  var raw = document.getElementById('adv-target').value;
+  msg.textContent = ''; box.innerHTML = '';
+  if (!tx.length) { msg.textContent = 'Classify at least one transaction first.'; return; }
+  var t = Number(raw);
+  if (raw === '' || isNaN(t) || t < 0) { msg.textContent = 'Enter a valid savings target (0 or more).'; return; }
+  btn.disabled = true; btn.textContent = 'Thinking…';
+  try {
+    var r = await fetch(ADVISE_BASE.replace(/\/$/, '') + '/consumer/advise', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ transactions: tx, params: { savings_target: t } }) });
+    if (!r.ok) {
+      var d = 'HTTP ' + r.status;
+      try { var j = await r.json(); d = (j.detail && (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail))) || d; } catch(e){}
+      msg.textContent = 'Advisor error: ' + d; return;
+    }
+    renderDecision(await r.json());
+  } catch(e) { msg.textContent = 'Backend unavailable: ' + e.message; }
+  finally { btn.disabled = false; btn.textContent = 'Get advice'; }
+}
+var ADVISE_BASE = 'https://fin-advisor-sa6h.onrender.com';
+try { if (typeof API_URL !== 'undefined') ADVISE_BASE = API_URL; else if (typeof BASE !== 'undefined') ADVISE_BASE = BASE; } catch(e){}
+window.requestAdvice = requestAdvice;
 </script>
+<script>
+/* ===== CSV upload → classification → same session transaction list ===== */
+async function uploadCsv(){
+  var input=document.getElementById('csv-file'), msg=document.getElementById('csv-msg'), btn=document.getElementById('csv-btn');
+  var file=input.files && input.files[0];
+  if(!file){ msg.textContent='Choose a CSV file first.'; return; }
+  btn.disabled=true; btn.textContent='Uploading…'; msg.textContent='';
+  try{
+    var text = await file.text();
+    var r = await fetch(ADVISE_BASE.replace(/\/$/,'') + '/consumer/transactions/ingest-csv', { method:'POST', headers:{'Content-Type':'text/csv','X-Filename':(file.name||'transactions.csv')}, body:text });
+    var j = null; try { j = await r.json(); } catch(e){}
+    if(!r.ok){
+      var d = j && j.detail;
+      msg.textContent = 'Upload failed: ' + (typeof d === 'string' ? d : (d && d.message) ? d.message : ('HTTP ' + r.status));
+      return;
+    }
+    var added = 0;
+    (j.classified || []).forEach(function(t){
+      if (t.category_l2 || t.category_l1) { window.__sessionTxns.push(t); added++; }
+    });
+    window.__updSessionCount();
+    var line = 'Processed ' + j.total_rows + ' row(s): ' + j.classified_count + ' classified, ' + j.invalid_rows + ' rejected.';
+    if (j.rejected && j.rejected.issues && j.rejected.issues.length){
+      var f = j.rejected.issues[0];
+      line += ' First: row ' + f.row_index + ' — ' + (f.field ? f.field + ': ' : '') + f.issue;
+    }
+    msg.textContent = line;
+    input.value = '';
+  } catch(e){ msg.textContent = 'Upload error: ' + e.message; }
+  finally { btn.disabled = false; btn.textContent = 'Upload CSV'; }
+}
+window.uploadCsv = uploadCsv;
+</script>
+
+<!-- ===== Decision Advisor (session-only MVP) ===== -->
+<style>
+#advisor-panel{position:fixed;bottom:16px;right:16px;width:340px;background:#fff;border:1px solid #ddd;border-radius:10px;padding:14px;box-shadow:0 4px 16px rgba(0,0,0,.15);z-index:9999;font-size:14px}
+#advisor-panel h3{margin:0 0 8px;font-size:15px}
+#advisor-panel input{width:100%;box-sizing:border-box;margin:4px 0 8px;padding:6px;border:1px solid #ccc;border-radius:6px}
+#adv-btn{width:100%;padding:8px;border:0;border-radius:6px;background:#2563eb;color:#fff;font-weight:600;cursor:pointer}
+#adv-btn:disabled{opacity:.6;cursor:default}
+#adv-msg{color:#b91c1c;font-size:12px;margin-top:6px;min-height:14px}
+.adv-badge{display:inline-block;padding:2px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:700;margin-bottom:6px}
+.adv-ok{background:#16a34a}.adv-warn{background:#d97706}.adv-bad{background:#dc2626}.adv-info{background:#64748b}
+.adv-warnbox{background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:6px 8px;margin:8px 0;font-size:12px}
+.adv-metrics{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.adv-metrics td{border-top:1px solid #eee;padding:3px 4px}
+.adv-metrics td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.adv-note{font-size:11px;color:#64748b;margin-top:8px}
+</style>
+<section id="advisor-panel">
+  <h3>AI Advisor &middot; <span id="adv-count">0</span> txns</h3>
+  <label>Monthly savings target
+    <input id="adv-target" type="number" min="0" step="50" placeholder="e.g. 500">
+  </label>
+  <button id="adv-btn" onclick="requestAdvice()">Get advice</button>
+  <div id="adv-msg"></div>
+  <div id="adv-result"></div>
+  <div style="border-top:1px solid #eee;margin:10px 0 8px"></div>
+  <label style="display:block;font-size:12px;color:#334155">Import transactions (CSV)
+    <input id="csv-file" type="file" accept=".csv,text/csv" style="margin:4px 0 6px;font-size:12px;width:100%">
+  </label>
+  <button id="csv-btn" onclick="uploadCsv()" style="width:100%;padding:6px;border:0;border-radius:6px;background:#0ea5e9;color:#fff;font-weight:600;cursor:pointer">Upload CSV</button>
+  <div id="csv-msg" style="color:#334155;font-size:12px;margin-top:6px;min-height:14px"></div>
+  <p class="adv-note">Session only (no storage). Classifications below 0.85 confidence are treated by the Advisor as Uncategorized (counted, never used for category cuts). Transfer / savings / income signals from the transaction data itself are always honored.</p>
+</section>
 </body>
 </html>

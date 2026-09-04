@@ -98,10 +98,12 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    from src.serving.routes.advise import router as advise_router
     from src.serving.routes.budget import router as budget_router
     from src.serving.routes.classify import router as classify_router
     from src.serving.routes.forecast import router as forecast_router
     from src.serving.routes.health import router as health_router
+    from src.serving.routes.ingest import router as ingest_router
     from src.serving.routes.live import router as live_router
 
     app = FastAPI(
@@ -148,6 +150,8 @@ def create_app() -> FastAPI:
     app.include_router(forecast_router, prefix="/v1", tags=["Forecasting"])
     app.include_router(budget_router, prefix="/v1", tags=["Budget"])
     app.include_router(live_router, tags=["Live Forecast & Budget"])
+    app.include_router(ingest_router, tags=["CSV Ingestion"])
+    app.include_router(advise_router, tags=["Decision Engine"])
 
     # ── Admin: generate a new API key (prints to stdout) ────────
     @app.get("/admin/generate-key", tags=["Admin"], include_in_schema=False)

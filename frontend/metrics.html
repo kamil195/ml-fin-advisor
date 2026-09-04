@@ -1,421 +1,140 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ML Fin-Advisor - Model Metrics</title>
-  <meta name="description" content="Real, sourced model performance metrics for ML Fin-Advisor: a personal finance ML project covering transaction classification, expense forecasting, and budget optimisation." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --bg:           #FFFFFF;
-      --text:         #1E293B;
-      --muted:        #64748B;
-      --accent:       #6366F1;
-      --accent-hover: #4F46E5;
-      --surface:      #F8FAFC;
-      --green:        #10B981;
-      --red:          #EF4444;
-      --amber:        #D97706;
-      --radius:       8px;
-      --border:       #E2E8F0;
-    }
-    html { font-size: 16px; }
-    body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-      padding: 0 1rem 4rem;
-    }
-    .page-wrap { max-width: 860px; margin: 0 auto; padding-top: 3rem; }
-    .hero { margin-bottom: 2.5rem; }
-    .hero-eyebrow {
-      font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.5rem;
-    }
-    .hero h1 { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1.2; margin-bottom: 0.75rem; }
-    .hero-desc { font-size: 0.9375rem; color: var(--muted); max-width: 640px; line-height: 1.75; }
-    .hero-meta { margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; font-size: 0.8125rem; color: var(--muted); }
-    .hero-meta span { display: flex; align-items: center; gap: 0.35rem; }
-    .banner {
-      background: #FFFBEB; border: 1px solid #FDE68A; border-radius: var(--radius);
-      padding: 0.875rem 1.1rem; font-size: 0.875rem; color: #78350F;
-      line-height: 1.65; margin-bottom: 2.5rem;
-    }
-    .banner strong { color: #92400E; }
-    .section { margin-bottom: 3rem; }
-    .section-title {
-      font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.07em; color: var(--muted); margin-bottom: 1rem;
-      display: flex; align-items: center; gap: 0.5rem;
-    }
-    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
-    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; }
-    .metric-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1.1rem 1.25rem;
-    }
-    .metric-label {
-      font-size: 0.75rem; font-weight: 500; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.45rem;
-    }
-    .metric-value { font-size: 2rem; font-weight: 700; color: var(--text); line-height: 1.1; margin-bottom: 0.3rem; }
-    .metric-value.good { color: var(--green); }
-    .metric-value.warn { color: var(--amber); }
-    .metric-value.bad  { color: var(--red); }
-    .metric-note { font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
-    .badge {
-      display: inline-flex; align-items: center; gap: 0.3rem;
-      font-size: 0.72rem; font-weight: 600; padding: 0.2rem 0.55rem;
-      border-radius: 999px; margin-top: 0.4rem;
-    }
-    .badge-pass  { background: #D1FAE5; color: #065F46; }
-    .badge-fail  { background: #FEE2E2; color: #991B1B; }
-    .badge-sim   { background: #EEF2FF; color: #4338CA; }
-    .badge-synth { background: #F1F5F9; color: #475569; }
-    .source-row {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 0.875rem 1.1rem;
-      font-size: 0.8125rem; color: var(--muted); margin-top: 0.75rem;
-      display: flex; gap: 0.5rem; align-items: flex-start;
-    }
-    .source-row code {
-      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.8125rem;
-      background: #E2E8F0; padding: 0.1rem 0.35rem; border-radius: 4px; color: var(--text);
-    }
-    .warn-row { background: #FFF7ED; border-color: #FED7AA; color: #7C2D12; margin-top: 0.5rem; }
-    details { margin-top: 1rem; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-    summary {
-      padding: 0.75rem 1rem; font-size: 0.875rem; font-weight: 500;
-      color: var(--accent); cursor: pointer; background: var(--surface);
-      list-style: none; display: flex; align-items: center; gap: 0.5rem;
-      user-select: none; transition: background 0.12s;
-    }
-    summary:hover { background: #EEF2FF; }
-    summary::-webkit-details-marker { display: none; }
-    .chev { margin-left: auto; transition: transform 0.2s; display: inline-block; }
-    details[open] .chev { transform: rotate(90deg); }
-    .details-body { padding: 1rem; background: var(--bg); }
-    table { width: 100%; border-collapse: collapse; font-size: 0.8375rem; }
-    thead th {
-      text-align: left; font-size: 0.72rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
-      padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border);
-    }
-    tbody tr:hover { background: var(--surface); }
-    tbody td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text); }
-    tbody tr:last-child td { border-bottom: none; }
-    .mg { color: var(--green); font-weight: 600; }
-    .mw { color: var(--amber); font-weight: 600; }
-    .mb { color: var(--red);   font-weight: 600; }
-    .py { color: var(--green); }
-    .pn { color: var(--red); }
-    .arch-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.875rem; }
-    .arch-list li { display: flex; gap: 0.6rem; align-items: flex-start; }
-    .arch-list li::before { content: '\203A'; color: var(--accent); font-weight: 700; flex-shrink: 0; }
-    .test-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.25rem; }
-    .test-summary { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
-    .test-stat { font-size: 0.875rem; }
-    .test-stat strong { font-weight: 600; }
-    .t-pass { color: var(--green); }
-    .t-fail { color: var(--red); }
-    .t-time { color: var(--muted); }
-    .test-fail-note {
-      background: #FEF2F2; border: 1px solid #FECACA; border-radius: 6px;
-      padding: 0.75rem 1rem; font-size: 0.8125rem; color: #7F1D1D; line-height: 1.6; margin-top: 0.6rem;
-    }
-    .test-fail-note code {
-      font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.78rem;
-      background: #FEE2E2; padding: 0.1rem 0.3rem; border-radius: 3px;
-    }
-    hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
-    .footer { font-size: 0.8125rem; color: var(--muted); line-height: 1.7; border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 3rem; }
-    .footer strong { color: var(--text); }
-    @media (max-width: 600px) {
-      .hero h1 { font-size: 1.5rem; }
-      .metric-value { font-size: 1.6rem; }
-      .metric-grid { grid-template-columns: 1fr 1fr; }
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ML Fin-Advisor · Model Performance Report</title>
+<style>
+  :root{--bg:#f6f8fb;--card:#fff;--ink:#1a2332;--muted:#5b6b7f;--accent:#2563eb;--good:#0e9f6e;--warn:#d97706;--bad:#dc2626;--border:#e3e9f1;--chip:#eef4ff}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55}
+  .wrap{max-width:1060px;margin:0 auto;padding:32px 20px 64px}
+  header.report{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:14px;padding:34px 34px 28px;margin-bottom:26px}
+  header.report h1{font-size:1.7rem;font-weight:700}
+  header.report p.sub{opacity:.92;margin-top:6px;font-size:.98rem}
+  .badges{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px}
+  .badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);padding:4px 12px;border-radius:999px;font-size:.78rem;font-weight:600}
+  .badge.warn{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+  h2{font-size:1.18rem;margin:34px 0 6px;padding-bottom:6px;border-bottom:2px solid var(--border)}
+  h2 .n{color:var(--accent);margin-right:8px}
+  p.lead{color:var(--muted);margin:8px 0 16px;font-size:.94rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 14px;text-align:center}
+  .metric .v{font-size:1.55rem;font-weight:700;color:var(--accent)}
+  .metric .k{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:4px}
+  .metric.good .v{color:var(--good)}.metric.warn .v{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-size:.9rem}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border)}
+  th{background:#f0f4fa;font-size:.74rem;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;text-align:right}
+  .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.74rem;font-weight:600}
+  .pill.ok{background:#d1fae5;color:#065f46}.pill.mid{background:#fef3c7;color:#92400e}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-top:12px}
+  .card h3{font-size:.98rem;margin-bottom:8px}
+  ul.clean{list-style:none}
+  ul.clean li{padding:7px 0 7px 26px;position:relative;border-bottom:1px dashed var(--border);font-size:.92rem}
+  ul.clean li:last-child{border-bottom:none}
+  ul.clean li:before{content:"✓";position:absolute;left:4px;color:var(--good);font-weight:700}
+  ul.clean li.x:before{content:"✕";color:var(--bad)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.two{grid-template-columns:1fr}header.report{padding:26px 20px}}
+  .note{background:var(--chip);border-left:4px solid var(--accent);border-radius:8px;padding:12px 16px;font-size:.88rem;color:#1e3a8a;margin-top:12px}
+  .note.amber{background:#fffbeb;border-color:var(--warn);color:#92400e}
+  code{background:#eef2f7;border-radius:5px;padding:1px 6px;font-size:.84em}
+  footer{margin-top:40px;color:var(--muted);font-size:.8rem;text-align:center;border-top:1px solid var(--border);padding-top:18px}
+  footer a{color:var(--accent);text-decoration:none}
+</style>
 </head>
 <body>
-  <div class="page-wrap">
+<div class="wrap">
 
-    <header class="hero">
-      <p class="hero-eyebrow">Portfolio Project &middot; ML Fin-Advisor</p>
-      <h1>Model Performance Metrics</h1>
-      <p class="hero-desc">
-        A personal-finance ML system that classifies bank transactions into 30 spending
-        categories, forecasts next-month category spend, and generates personalised budget
-        recommendations using linear programming. Built with LightGBM, XGBoost, and
-        Holt-Winters Exponential Smoothing.
-      </p>
-      <div class="hero-meta">
-        <span>&#128197; Last updated: 16 August 2026</span>
-        <span>&#128302; MLflow run: <code style="font-size:0.78rem;background:#F1F5F9;padding:0.1rem 0.3rem;border-radius:4px;">1a610c213a1e4c128e6d06742ba8c161</code></span>
-        <span>&#128194; <a href="https://github.com/kamil195/ml-fin-advisor" style="color:var(--accent);text-decoration:none;">github.com/kamil195/ml-fin-advisor</a></span>
-      </div>
-    </header>
-
-    <div class="banner" role="note">
-      <strong>&#9888; Important context before reading these numbers:</strong><br>
-      All metrics below are measured on <strong>100% synthetically generated transaction data</strong>
-      &mdash; no real bank records or real user behaviour was used at any point. This is a
-      <strong>personal portfolio project, pre-revenue, not yet validated against real-world data.</strong>
-      Where a metric does not meet its design target, that is stated clearly and not hidden.
-    </div>
-
-    <!-- CLASSIFIER -->
-    <section class="section" id="classifier">
-      <h2 class="section-title">Transaction Classifier</h2>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <p class="metric-label">Macro-F1</p>
-          <p class="metric-value good">0.9995</p>
-          <p class="metric-note">Macro-averaged F1 across all 30 categories, measured on held-out test split (last 2 months of synthetic data).</p>
-          <span class="badge badge-pass">&#10003; Target &ge; 0.92</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Top-3 Accuracy</p>
-          <p class="metric-value good">100.0%</p>
-          <p class="metric-note">Correct category appears in the model's top 3 predictions for every test transaction.</p>
-          <span class="badge badge-pass">&#10003; Target &ge; 98.5%</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">ECE (Calibration)</p>
-          <p class="metric-value warn">0.0459</p>
-          <p class="metric-note">Expected Calibration Error (15-bin). Measures how well predicted probabilities match empirical accuracy.</p>
-          <span class="badge badge-fail">&#10007; Target &le; 0.03 &mdash; not yet met</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Min Per-Class Recall</p>
-          <p class="metric-value good">0.9924</p>
-          <p class="metric-note">Lowest recall across all 30 classes: <strong>Fuel</strong> at 0.9924. All other 29 classes achieved 1.0.</p>
-          <span class="badge badge-pass">&#10003; Target &ge; 0.85</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Categories</p>
-          <p class="metric-value">30</p>
-          <p class="metric-note">Distinct spending categories including Income, Savings &amp; Investments, Rent/Mortgage, and 27 discretionary/fixed classes.</p>
-          <span class="badge badge-synth">Synthetic data</span>
-        </div>
-      </div>
-
-      <div class="source-row">
-        &#128204; Source: MLflow run <code>1a610c213a1e4c128e6d06742ba8c161</code> (logged 2026-02-20)
-        &middot; keys <code>classification/macro_f1</code>, <code>classification/top_3_accuracy</code>,
-        <code>classification/ece</code> &middot; Per-class recall from <code>data/per_class_recall.json</code>
-      </div>
-      <div class="source-row warn-row">
-        &#9888; <strong>Why are these numbers so high?</strong>&nbsp; Merchant names in the synthetic
-        dataset are deterministic &mdash; &ldquo;Whole Foods Market&rdquo; always maps to Groceries,
-        &ldquo;Starbucks&rdquo; always to Coffee Shops, etc. The classifier can nearly memorise this
-        mapping. These numbers do <em>not</em> predict real-world performance on diverse, noisy bank data.
-      </div>
-
-      <details>
-        <summary>Architecture details <span class="chev">&#8250;</span></summary>
-        <div class="details-body">
-          <ul class="arch-list">
-            <li><strong>Stage 1 &mdash; LightGBM base learner</strong>: 800 trees, max depth 10, lr 0.05, 127 leaves, class-balanced weights</li>
-            <li><strong>Text features</strong>: TF-IDF on character n-grams (2&ndash;4), max 5,000 vocab, compressed to 128 dimensions via Truncated SVD on merchant name + raw description</li>
-            <li><strong>Numerical features</strong>: amount, MCC code, account type, channel, temporal signals (hour, day-of-week, month)</li>
-            <li><strong>Stage 2 &mdash; XGBoost meta-learner</strong>: trained on 5-fold out-of-fold LightGBM probabilities concatenated with original features (300 trees, max depth 5, lr 0.08)</li>
-            <li><strong>Training data</strong>: 24,516 rows, 30 synthetic users, 2024-03-01 to 2024-12-31; temporal split (last 4 months held out: 2 val + 2 test)</li>
-          </ul>
-        </div>
-      </details>
-    </section>
-
-    <!-- FORECASTER -->
-    <section class="section" id="forecaster">
-      <h2 class="section-title">Expense Forecaster</h2>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <p class="metric-label">Overall MAPE</p>
-          <p class="metric-value good">8.19%</p>
-          <p class="metric-note">Mean Absolute Percentage Error across 15 spend categories, comparing Holt-Winters p50 forecast to actual synthetic spend in the held-out validation month.</p>
-          <span class="badge badge-pass">&#10003; Target &le; 12%</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Median APE</p>
-          <p class="metric-value good">4.80%</p>
-          <p class="metric-note">Median absolute percentage error &mdash; less sensitive to outlier categories like Fuel (26.83%) and Loan Payments (19.67%).</p>
-          <span class="badge badge-synth">Synthetic data</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">90% PI Coverage</p>
-          <p class="metric-value bad">73.3%</p>
-          <p class="metric-note">Fraction of actual values that fell inside the 10th&ndash;90th percentile interval. 11 of 15 categories were covered.</p>
-          <span class="badge badge-fail">&#10007; Target &ge; 85% &mdash; not yet met</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Categories Forecast</p>
-          <p class="metric-value">15</p>
-          <p class="metric-note">Only categories with sufficient historical volume were modelled. Remaining 15 of 30 had too few months of data for Exponential Smoothing.</p>
-          <span class="badge badge-synth">Synthetic data</span>
-        </div>
-      </div>
-
-      <div class="source-row">
-        &#128204; Source: <code>models/serving/forecast_results.json</code> (field <code>mape</code> = 8.192844344106197)
-        &middot; MLflow <code>forecasting/mape</code>, <code>forecasting/median_ape</code>, <code>forecasting/coverage_90</code>
-      </div>
-
-      <details id="forecast-breakdown">
-        <summary>View per-category MAPE breakdown (all 15 categories) <span class="chev">&#8250;</span></summary>
-        <div class="details-body">
-          <p style="font-size:0.8125rem;color:var(--muted);margin-bottom:0.75rem;">
-            All values sourced directly from <code>models/serving/forecast_results.json</code>.
-            p50 = median forecast. &ldquo;In 90% PI?&rdquo; = actual fell within the 10th&ndash;90th percentile interval.
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>MAPE&nbsp;(%)</th>
-                <th>Actual</th>
-                <th>p50 Forecast</th>
-                <th>In 90% PI?</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td>Subscriptions &amp; Streaming</td><td class="mg">0.92%</td><td>6,413.67</td><td>6,354.62</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Healthcare &amp; Pharmacy</td><td class="mg">1.18%</td><td>26,752.21</td><td>26,437.40</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Utilities</td><td class="mg">1.63%</td><td>21,431.58</td><td>21,780.88</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Clothing &amp; Accessories</td><td class="mg">2.84%</td><td>24,563.18</td><td>23,864.61</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Restaurants</td><td class="mg">3.54%</td><td>22,092.50</td><td>22,873.70</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Ride-Share</td><td class="mg">4.57%</td><td>6,069.88</td><td>6,347.09</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Home Insurance</td><td class="mg">4.79%</td><td>19,441.74</td><td>20,373.06</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Fees &amp; Charges</td><td class="mg">4.80%</td><td>2,864.97</td><td>3,002.61</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Food Delivery</td><td class="mg">7.64%</td><td>6,634.84</td><td>6,128.08</td><td class="pn">&#10007; No</td></tr>
-              <tr><td>Coffee Shops</td><td class="mw">10.18%</td><td>1,456.93</td><td>1,605.27</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Insurance Premiums</td><td class="mw">10.21%</td><td>28,589.68</td><td>25,671.82</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Groceries</td><td class="mw">10.38%</td><td>59,905.90</td><td>53,686.44</td><td class="pn">&#10007; No</td></tr>
-              <tr><td>Electronics</td><td class="mw">13.72%</td><td>124,401.49</td><td>107,331.68</td><td class="py">&#10003; Yes</td></tr>
-              <tr><td>Loan Payments</td><td class="mb">19.67%</td><td>41,515.55</td><td>49,681.16</td><td class="pn">&#10007; No</td></tr>
-              <tr><td>Fuel</td><td class="mb">26.83%</td><td>5,984.63</td><td>7,590.06</td><td class="pn">&#10007; No</td></tr>
-            </tbody>
-          </table>
-          <p style="font-size:0.78rem;color:var(--muted);margin-top:0.75rem;">
-            Categories with &le; 5 months of spend data (15 of 30) were excluded from forecasting.
-            Fuel and Loan Payments show higher error, consistent with high volatility in the synthetic spend patterns.
-          </p>
-        </div>
-      </details>
-    </section>
-
-    <!-- BUDGET -->
-    <section class="section" id="budget">
-      <h2 class="section-title">Budget Optimiser</h2>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <p class="metric-label">Simulated Acceptance Rate</p>
-          <p class="metric-value">80.9%</p>
-          <p class="metric-note">Fraction of budget recommendations where the simulated user &ldquo;accepted&rdquo; the suggestion without modification.</p>
-          <span class="badge badge-sim">&#9888; Simulation only &mdash; not real users</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Budget Feasibility</p>
-          <p class="metric-value good">100.0%</p>
-          <p class="metric-note">All 30 synthetic users received a mathematically valid budget where total allocations &le; income.</p>
-          <span class="badge badge-pass">&#10003; Target &ge; 70%</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Avg Projected Savings</p>
-          <p class="metric-value good">23.1%</p>
-          <p class="metric-note">Average share of income recommended to savings, computed as (income &minus; total budget) / income across 30 users.</p>
-          <span class="badge badge-pass">&#10003; Target &ge; 10%</span>
-        </div>
-      </div>
-      <div class="source-row">
-        &#128204; Source: <code>models/serving/budget_results.json</code>
-        (keys <code>acceptance_rate</code> = 80.898876&hellip;, <code>feasibility_rate</code> = 100.0,
-        <code>avg_savings_pct</code> = 23.076923&hellip;)
-        &middot; MLflow <code>budget/acceptance_simulation</code>, <code>budget/feasibility_rate</code>, <code>budget/avg_savings_pct</code>
-      </div>
-      <div class="source-row warn-row">
-        &#9888; <strong>Acceptance rate is a simulation, not a user study.</strong>&nbsp;
-        The code uses the heuristic <code>prob_accept = max(0, 1 &minus; reduction_pct / 50)</code>
-        (<code>run_pipeline.py</code> line 646) &mdash; a probabilistic model that assumes users are more
-        likely to accept small spending cuts. No real users have been shown these recommendations.
-      </div>
-    </section>
-
-    <!-- DATASET -->
-    <section class="section" id="dataset">
-      <h2 class="section-title">Dataset</h2>
-      <div class="metric-grid">
-        <div class="metric-card">
-          <p class="metric-label">Total Rows</p>
-          <p class="metric-value">24,516</p>
-          <p class="metric-note">Transactions in <code>data/raw/transactions.csv</code> (line count verified via PowerShell).</p>
-          <span class="badge badge-synth">100% synthetic</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Synthetic Users</p>
-          <p class="metric-value">30</p>
-          <p class="metric-note">Distinct <code>user_id</code> values in the same CSV. Each user has ~10 months of transaction history.</p>
-          <span class="badge badge-synth">100% synthetic</span>
-        </div>
-        <div class="metric-card">
-          <p class="metric-label">Date Range</p>
-          <p class="metric-value" style="font-size:1.2rem;">Mar &ndash; Dec 2024</p>
-          <p class="metric-note">2024-03-01 to 2024-12-31. Generated by <code>src/data/mock_generator.py</code> with deterministic merchant profiles.</p>
-          <span class="badge badge-synth">100% synthetic</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- TESTS -->
-    <section class="section" id="tests">
-      <h2 class="section-title">Test Suite</h2>
-      <div class="test-block">
-        <div class="test-summary">
-          <span class="test-stat t-pass">&#10003; <strong>31 passed</strong></span>
-          <span class="test-stat" style="color:var(--amber);">&#10022; <strong>1 skipped</strong></span>
-          <span class="test-stat t-time">&#9201; <strong>97.28 s</strong> (1 min 37 s)</span>
-          <span class="test-stat" style="color:var(--muted);">32 collected &mdash; <code style="font-size:0.78rem;">pytest tests/ -v</code></span>
-        </div>
-        <p style="font-size:0.8375rem;color:var(--muted);">
-          Passing tests cover: Transaction Pydantic model validation, currency/country normalisation,
-          category hierarchy integrity, MCC code lookup, batch properties, mock data generation
-          (row count, signed amounts, income presence), CSV ingestion (valid rows, invalid rows,
-          missing file, quality checks, duplicate detection), and a full generate-then-ingest round-trip.
-        </p>
-        <div class="test-fail-note" style="background:#FFFBEB;border-color:#FDE68A;color:#78350F;">
-          <strong>Intentionally skipped test:</strong>
-          <code>test_classifier_training_learns_better_than_random_baseline</code>
-          (<code>tests/unit/test_classifier_training.py</code>)<br><br>
-          This test exercises the standalone <code>ClassifierTrainer</code> path in
-          <code>src/models/classifier/train.py</code> (MLP + TextTower + meta-learner), which is
-          <strong>not</strong> the model served in production. The served classifier artifacts live
-          in <code>models/serving/</code> and are produced by <code>run_pipeline.py</code>
-          (LightGBM + XGBoost meta-learner). Because that parallel training path is currently
-          disconnected from serving, the test is marked <code>@pytest.mark.skip</code> so CI does
-          not report a false failure — it is not an active test or a current bug.
-        </div>
-      </div>
-    </section>
-
-    <hr />
-
-    <footer class="footer">
-      <strong>Portfolio &amp; Disclaimer</strong><br>
-      Personal/portfolio project. Pre-revenue, not yet validated against real user data.
-      All metrics above are measured on synthetically generated transaction data unless explicitly
-      noted otherwise. No real bank records, payment data, or user behaviour data were used at
-      any stage. Numbers reflect the state of the model as of the MLflow run dated 2026-02-20
-      (run ID <code style="font-size:0.78rem;">1a610c213a1e4c128e6d06742ba8c161</code>),
-      with test results captured on 16 August 2026.<br><br>
-      Source code: <a href="https://github.com/kamil195/ml-fin-advisor" style="color:var(--accent);">github.com/kamil195/ml-fin-advisor</a>
-    </footer>
-
+<header class="report">
+  <h1>ML Fin-Advisor — Model Performance Report</h1>
+  <p class="sub">Transaction classification &amp; expense forecasting · leak-free evaluation baseline</p>
+  <div class="badges">
+    <span class="badge">LightGBM + XGBoost meta-learner</span>
+    <span class="badge">Temporal (time-ordered) evaluation</span>
+    <span class="badge warn">SYNTHETIC-DATASET EVALUATION — not real-world production performance</span>
   </div>
+</header>
+
+<h2><span class="n">1</span>Headline Results</h2>
+<p class="lead">Classifier evaluated on a held-out temporal test split of the synthetic dataset. All numbers are reproducible from <code>run_pipeline.py</code> (seed 42) and logged to MLflow.</p>
+<div class="grid">
+  <div class="metric"><div class="v">0.8910</div><div class="k">Accuracy</div></div>
+  <div class="metric"><div class="v">0.8556</div><div class="k">Macro-F1</div></div>
+  <div class="metric"><div class="v">0.8911</div><div class="k">Weighted-F1</div></div>
+  <div class="metric good"><div class="v">0.9807</div><div class="k">Top-3 Accuracy</div></div>
+  <div class="metric warn"><div class="v">0.0781</div><div class="k">ECE (calibration)</div></div>
+  <div class="metric"><div class="v">0.0456</div><div class="k">Majority Baseline</div></div>
+</div>
+<div class="note amber"><b>Honesty notice:</b> these figures were measured on <b>synthetically generated</b> transactions. They demonstrate methodology and pipeline correctness — they are <b>not</b> estimates of real-customer accuracy and must not be presented as such.</div>
+<h2><span class="n">2</span>Zero-Recall Recovery (Data-Quality Fix)</h2>
+<p class="lead">The first leak-free evaluation exposed 5 classes with zero recall. Root cause: the synthetic generator gave them no learnable textual signal (identity carried only by <code>Channel.TRANSFER</code> + label). After expanding merchant/description diversity — with <b>no model or hyperparameter changes</b> — recall recovered:</p>
+<table>
+  <tr><th>Category</th><th class="num">Recall before</th><th class="num">Recall after</th><th class="num">Precision</th><th class="num">F1</th><th>Status</th></tr>
+  <tr><td>Clothing &amp; Accessories</td><td class="num">0.0000</td><td class="num">0.7821</td><td class="num">0.8019</td><td class="num">0.7917</td><td><span class="pill mid">Recovered</span></td></tr>
+  <tr><td>Income</td><td class="num">0.0000</td><td class="num">0.9685</td><td class="num">0.9685</td><td class="num">0.9685</td><td><span class="pill ok">Strong</span></td></tr>
+  <tr><td>Insurance Premiums</td><td class="num">0.0000</td><td class="num">0.8818</td><td class="num">0.8818</td><td class="num">0.8818</td><td><span class="pill ok">Strong</span></td></tr>
+  <tr><td>Parking &amp; Tolls</td><td class="num">0.0000</td><td class="num">0.7891</td><td class="num">0.7891</td><td class="num">0.7891</td><td><span class="pill mid">Recovered</span></td></tr>
+  <tr><td>Rent/Mortgage</td><td class="num">0.0000</td><td class="num">0.9010</td><td class="num">0.9010</td><td class="num">0.9010</td><td><span class="pill ok">Strong</span></td></tr>
+</table>
+<p class="lead" style="margin-top:10px">Effect on the whole model: Macro-F1 <b>0.6880 → 0.8556</b>, Top-3 <b>0.9162 → 0.9807</b>, ECE <b>0.1051 → 0.0781</b> — from data fixes alone.</p>
+
+<h2><span class="n">3</span>Forecasting</h2>
+<div class="grid">
+  <div class="metric"><div class="v">6.10%</div><div class="k">MAPE (synthetic)</div></div>
+  <div class="metric"><div class="v">73.3%</div><div class="k">90% Interval Coverage</div></div>
+  <div class="metric"><div class="v">15</div><div class="k">Categories Modelled</div></div>
+</div>
+<p class="lead" style="margin-top:10px">Ensemble of seasonal mean, exponential smoothing and per-user blend, validated on a 2-month temporal holdout. Coverage sits below the 85–95% target — reported honestly rather than tuned away.</p>
+<h2><span class="n">4</span>Methodology</h2>
+<div class="two">
+  <div class="card">
+    <h3>Leak-free evaluation protocol</h3>
+    <ul class="clean">
+      <li>Time-ordered train / validation / test split — no random shuffling, no future data in training features</li>
+      <li>Target-derived feature removed (<code>is_discretionary</code>)</li>
+      <li>User-level aggregates computed prior-only (expanding, shifted)</li>
+      <li>Preprocessing fitted on train only · fixed seed (42) · metrics logged to MLflow</li>
+      <li>Majority-class baseline (0.0456) reported next to every headline metric</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Train / serve consistency</h3>
+    <ul class="clean">
+      <li>Meta-learner input assembled by a single shared contract function</li>
+      <li>Regression tests assert training and serving build identical meta inputs</li>
+      <li>Serving loads the exact artifacts evaluated here (<code>models/serving/</code>)</li>
+      <li class="x">Known gap: serving features use single-transaction semantics — user-history aggregates are queued for parity work</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="n">5</span>Product-Safety Layer (deterministic, rule-based)</h2>
+<table>
+  <tr><th>Guard</th><th>Behaviour</th><th>Status</th></tr>
+  <tr><td>Confidence gating</td><td>Classifier predictions below 0.85 confidence never enter financially consequential buckets — the amount stays visible as <code>Uncategorized</code></td><td><span class="pill ok">Enforced</span></td></tr>
+  <tr><td>Hard-protected categories</td><td>Rent/Mortgage, Insurance Premiums, Utilities, Loan Payments, Taxes are never recommended as budget cuts — unachievable targets return <code>partial</code>/<code>infeasible</code> instead</td><td><span class="pill ok">Enforced</span></td></tr>
+  <tr><td>Uncategorized isolation</td><td>Uncertain transactions remain counted in totals but can never become a cuttable scenario category</td><td><span class="pill ok">Enforced</span></td></tr>
+  <tr><td>Transfer/refund semantics</td><td>Internal transfers and savings movements are excluded from income and expenses; refunds never inflate income</td><td><span class="pill ok">Enforced</span></td></tr>
+  <tr><td>Deterministic decisions</td><td>Same inputs → identical FinancialProfile → ScenarioResult → DecisionResult (no LLM, no randomness, no wall-clock)</td><td><span class="pill ok">Enforced</span></td></tr>
+</table>
+
+<h2><span class="n">6</span>Known Limitations</h2>
+<ul class="clean">
+  <li class="x">All results are from <b>synthetic</b> data with a deterministic merchant catalogue — real-world performance is unmeasured</li>
+  <li class="x">Calibration (ECE 0.0781) sits above the 0.05 target; re-calibration planned after the next retrain</li>
+  <li class="x">Forecast 90% interval coverage (73.3%) is below the 85–95% target — reported, not tuned away</li>
+  <li class="x">Residual classes still recall below 0.80 — treated as data work, not model tuning</li>
+</ul>
+
+<footer>
+  Reproducible from <code>run_pipeline.py</code> (seed 42) · artifacts in <code>models/serving/</code> · metrics logged to MLflow ·
+  <a href="index.html">← Back to app</a>
+</footer>
+
+</div>
 </body>
 </html>

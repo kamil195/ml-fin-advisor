@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from src.utils.constants import HARD_PROTECTED_CATEGORIES
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,6 +70,7 @@ class BudgetOptimiser:
         category_floors: dict[str, float] | None = None,
         elasticity_scores: dict[str, float] | None = None,
         is_discretionary: dict[str, bool] | None = None,
+        protected_categories: set[str] | None = None,
     ) -> OptimisationResult:
         """
         Run the budget optimisation.
@@ -86,6 +89,15 @@ class BudgetOptimiser:
             Per-category elasticity (higher = easier to reduce).
         is_discretionary : dict | None
             Whether each category is discretionary.
+        protected_categories : set[str] | None
+            Category names that must NEVER be reduced. Protected categories
+            receive a floor equal to their full baseline (zero cut possible)
+            and are excluded from discretionary weighting regardless of the
+            ``is_discretionary`` mapping. When ``None``, the optimizer defaults
+            to the canonical ``HARD_PROTECTED_CATEGORIES`` (essential
+            obligations such as Rent/Mortgage, Insurance Premiums, taxes,
+            loan payments, utilities, home insurance). Pass an empty set to
+            disable protection.
         """
         categories = list(category_baselines.keys())
         n = len(categories)
@@ -98,6 +110,22 @@ class BudgetOptimiser:
         # Defaults
         if category_floors is None:
             category_floors = {c: baselines[i] * 0.5 for i, c in enumerate(categories)}
+
+        if is_discretionary is None:
+            is_discretionary = {c: True for c in categories}
+        else:
+            # Copy so caller's dict is never mutated.
+            is_discretionary = dict(is_discretionary)
+
+        # ── Hard protection: never reduce protected categories ────────────
+        # Floor == full baseline ⇒ ``baselines - floors == 0``, so the cut is
+        # clamped to zero in the heuristic redistribution AND in the LP bounds.
+        protected = protected_categories if protected_categories is not None else set(HARD_PROTECTED_CATEGORIES)
+        for i, c in enumerate(categories):
+            if c in protected:
+                category_floors[c] = baselines[i]
+                is_discretionary[c] = False
+
         floors = np.array([category_floors.get(c, 0.0) for c in categories])
 
         if elasticity_scores is None:

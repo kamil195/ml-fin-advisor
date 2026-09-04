@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -312,3 +312,254 @@ class ValidationReport(BaseModel):
     @property
     def is_clean(self) -> bool:
         return self.invalid_rows == 0
+
+
+# ── Canonical Planning Contracts (Financial Intelligence layer) ───────────────
+#
+# Minimal, extensible schemas for the upcoming product layer:
+#
+#   Transactions → Classification → FinancialProfile
+#     → Behaviour / Forecast / Budget → Scenario → Decision
+#     → AI Copilot → Outcome Tracking
+#
+# Contracts only — no route wiring or engine yet. Money fields are *monthly*
+# amounts in the profile currency unless stated otherwise.
+
+
+class FinancialProfile(BaseModel):
+    """
+    Canonical, deterministic snapshot of a user's monthly financial state.
+
+    Aggregation input (transactions) and consumers (behaviour, forecast,
+    budget, scenario, decision) all speak this one representation.
+    Expense components are non-overlapping: ``discretionary_expenses`` is a
+    subset of ``variable_expenses``.
+    """
+
+    user_id: str = Field(description="Owner of the profile.")
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    period: str | None = Field(
+        default=None,
+        description="Label of the aggregation window, e.g. '2026-03' or 'last_90d'.",
+    )
+
+    # ── Income & expenses ────────────────────────────────────────────────
+    monthly_income: Annotated[float, Field(ge=0)]
+    fixed_expenses: Annotated[float, Field(ge=0)] = 0.0
+    variable_expenses: Annotated[float, Field(ge=0)] = 0.0
+    discretionary_expenses: Annotated[float, Field(ge=0)] = 0.0
+    recurring_expenses: Annotated[float, Field(ge=0)] = 0.0
+    total_expenses: float | None = Field(
+        default=None,
+        description=(
+            "Total monthly outflow. Optional — consumers may derive it as "
+            "fixed + variable when omitted."
+        ),
+    )
+    category_spending: dict[str, float] = Field(
+        default_factory=dict,
+        description="Average monthly spend by category name (e.g. CategoryL2 values).",
+    )
+
+    # ── Savings, debt & obligations ──────────────────────────────────────
+    monthly_savings: float | None = Field(
+        default=None,
+        description="Monthly amount saved (may be negative when outflow exceeds income).",
+    )
+    savings_rate: Annotated[float, Field(ge=0.0, le=1.0)] | None = Field(
+        default=None,
+        description="monthly_savings / monthly_income as a fraction [0, 1].",
+    )
+    total_debt: Annotated[float, Field(ge=0)] | None = None
+    monthly_debt_payments: Annotated[float, Field(ge=0)] | None = None
+
+    # ── Cash-flow & resilience ───────────────────────────────────────────
+    monthly_net_cash_flow: float | None = Field(
+        default=None,
+        description="Inflow − outflow per month; negative indicates a deficit.",
+    )
+    liquid_buffer: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description="Cash/liquid assets available today.",
+    )
+    months_of_buffer: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description="liquid_buffer ÷ total monthly expenses (resilience).",
+    )
+
+    # ── Money movement (informational, monthly-normalised, gross) ────────
+    transfers_total: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description=(
+            "Gross internal account-to-account transfers observed in the "
+            "window (unlabelled Channel.TRANSFER). Excluded from income "
+            "and expenses."
+        ),
+    )
+    savings_transfers_total: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description=(
+            "Gross movements to/from savings & investments (either "
+            "direction). Excluded from income and expenses."
+        ),
+    )
+    refunds_total: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description=(
+            "Gross credits that are not classified income (refunds, "
+            "reversals, unidentified credits). Excluded from income; "
+            "reported separately rather than netted against expenses."
+        ),
+    )
+
+    generated_at: datetime | None = None
+
+    @field_validator("currency")
+    @classmethod
+    def currency_uppercase(cls, v: str) -> str:
+        return v.upper()
+
+
+class BehavioralProfile(BaseModel):
+    """
+    Interpretable behavioural summary for a user.
+
+    Deliberately excludes raw model internals (posteriors, changepoint
+    distributions): every field is a human-readable signal the decision and
+    AI layers can consume directly.
+    """
+
+    user_id: str
+    generated_at: datetime | None = None
+    observation_days: Annotated[int, Field(ge=1)] | None = Field(
+        default=None,
+        description="Length of the history window the profile summarises.",
+    )
+
+    spending_regime: Literal["normal", "elevated", "reduced", "irregular"] | None = Field(
+        default=None,
+        description="Current spending regime (same vocabulary as CategoryForecast.regime).",
+    )
+    discretionary_ratio: Annotated[float, Field(ge=0.0, le=1.0)] | None = Field(
+        default=None,
+        description="Share of spending that is discretionary [0, 1].",
+    )
+    impulse_score: Annotated[float, Field(ge=0.0, le=1.0)] | None = None
+    spending_volatility: Annotated[float, Field(ge=0.0)] | None = Field(
+        default=None,
+        description="Spending variability (e.g. coefficient of variation; unitless).",
+    )
+    savings_behavior_score: Annotated[float, Field(ge=0.0, le=1.0)] | None = Field(
+        default=None,
+        description="0 = spends everything, 1 = consistently saves.",
+    )
+    habit_strength: dict[str, Annotated[float, Field(ge=0.0, le=1.0)]] = Field(
+        default_factory=dict,
+        description="Per-category habit strength [0, 1] (regularity × consistency × duration).",
+    )
+
+    top_patterns: list[str] = Field(
+        default_factory=list,
+        description="Human-readable behaviour summaries (for the AI copilot).",
+    )
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ScenarioParams(BaseModel):
+    """
+    User-selectable assumptions for a what-if scenario.
+
+    Percentage changes are relative to the baseline FinancialProfile; a
+    default-constructed instance is the identity (no-change) scenario.
+    """
+
+    scenario_id: str | None = None
+    name: str | None = None
+    horizon_months: Annotated[int, Field(ge=1, le=36)] = 1
+
+    income_change_pct: float = Field(
+        default=0.0,
+        ge=-100.0,
+        description="Relative income change; −100 eliminates income, +25 is a raise.",
+    )
+    expense_change_pct: float = Field(
+        default=0.0,
+        ge=-100.0,
+        description="Relative change applied to total expenses.",
+    )
+    savings_target: Annotated[float, Field(ge=0)] | None = Field(
+        default=None,
+        description="Absolute monthly savings target in currency units (overrides rate).",
+    )
+    category_changes: dict[str, float] = Field(
+        default_factory=dict,
+        description="Category name → % change in that category's monthly spend.",
+    )
+
+    @field_validator("category_changes")
+    @classmethod
+    def validate_category_changes(cls, v: dict[str, float]) -> dict[str, float]:
+        for cat, pct in v.items():
+            if pct < -100.0:
+                raise ValueError(
+                    f"category_changes[{cat!r}] = {pct}: cannot reduce below −100%."
+                )
+        return v
+
+
+class MetricChange(BaseModel):
+    """A single before/after delta produced by a scenario."""
+
+    metric: str = Field(description="FinancialProfile field name, e.g. 'monthly_income'.")
+    before: float | None = None
+    after: float | None = None
+    delta: float | None = None
+
+
+class ScenarioResult(BaseModel):
+    """Outcome of applying ScenarioParams to a baseline FinancialProfile."""
+
+    scenario_id: str | None = None
+    params: ScenarioParams | None = None
+    status: Literal["feasible", "infeasible", "partial"] = Field(
+        description=(
+            "feasible = applies cleanly; infeasible = violates constraints; "
+            "partial = applied with adjustments (see warnings)."
+        )
+    )
+    resulting_profile: FinancialProfile = Field(
+        description="Projected financial state after the scenario.",
+    )
+    key_changes: list[MetricChange] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class DecisionResult(BaseModel):
+    """
+    A single, explainable recommendation produced by the decision layer.
+
+    Deterministic fields (recommendation, reasoning, metrics) are computed by
+    rules/optimisers; ``confidence`` is optional so purely rule-based
+    decisions remain representable.
+    """
+
+    decision_id: str | None = None
+    scenario_id: str | None = None
+    decision_type: str = Field(
+        description="Coarse kind of decision, e.g. 'budget_adjustment', 'savings_goal'.",
+    )
+    recommendation: str = Field(
+        description="Primary human-readable action to take.",
+    )
+    reasoning: str | None = Field(
+        default=None,
+        description="Explanation of why this decision was reached.",
+    )
+    supporting_metrics: dict[str, float] = Field(
+        default_factory=dict,
+        description="Metrics that back the recommendation (name → value).",
+    )
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] | None = None
+    alternatives: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    generated_at: datetime | None = None

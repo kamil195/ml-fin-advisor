@@ -26,6 +26,7 @@ from src.utils.constants import (
     DISCRETIONARY_CATEGORIES,
     lookup_category_by_mcc,
 )
+from src.utils.meta_input import build_meta_input
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +186,7 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
 
         # ── 6. Meta-learner stacking (only if base is uncertain) ──────
         if state.meta_model is not None and proba.max() < 0.90:
-            meta_input = np.hstack([X, proba.reshape(1, -1)])
+            meta_input = build_meta_input(proba.reshape(1, -1), X)
             proba = state.meta_model.predict_proba(meta_input)[0]
 
         # ── 7. Top-3 predictions ──────────────────────────────────

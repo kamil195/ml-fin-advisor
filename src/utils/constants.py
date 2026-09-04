@@ -153,6 +153,25 @@ DISCRETIONARY_CATEGORIES: set[CategoryL2] = {
 }
 
 
+# ── Hard-protected (never-cut) categories ──────────────────────────────────────
+#
+# Essential obligations that must never be recommended for reduction by the
+# budget optimizer / scenario engine. Plain string values so the optimizer
+# (which sits below the services layer) can enforce the policy without
+# importing from services. Mirrors ``financial_profile.FIXED_CATEGORIES`` but
+# defined here as the single source of truth for cut protection.
+HARD_PROTECTED_CATEGORIES: frozenset[str] = frozenset(
+    {
+        CategoryL2.RENT_MORTGAGE.value,      # "Rent/Mortgage"
+        CategoryL2.UTILITIES.value,          # "Utilities"
+        CategoryL2.HOME_INSURANCE.value,     # "Home Insurance"
+        CategoryL2.INSURANCE_PREMIUMS.value, # "Insurance Premiums"
+        CategoryL2.LOAN_PAYMENTS.value,      # "Loan Payments"
+        CategoryL2.TAXES.value,              # "Taxes"
+    }
+)
+
+
 # ── MCC Code Mappings (SPEC Appendix B) ───────────────────────────────────────
 
 # Maps MCC code ranges to (L1, L2) category tuples.

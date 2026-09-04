@@ -48,7 +48,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils.constants import (
     CATEGORY_HIERARCHY,
-    DISCRETIONARY_CATEGORIES,
     CategoryL1,
     CategoryL2,
     MCC_TO_CATEGORY,
@@ -109,12 +108,11 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     temp_feats = extract_temporal_features(df)
     logger.info("  Temporal:  %d columns", temp_feats.shape[1])
 
-    # ── Derived merchant / category features (lightweight) ────────────────
+    # ── Derived merchant features (lightweight) ───────────────────────────
     merchant_feats = pd.DataFrame(index=df.index)
     merchant_feats["mcc"] = df["merchant_mcc"].astype(float)
-    merchant_feats["is_discretionary"] = df["category_l2"].map(
-        lambda c: 1.0 if c in DISCRETIONARY_CATEGORIES or c in {x.value for x in DISCRETIONARY_CATEGORIES} else 0.0
-    )
+    # NOTE: do NOT add an `is_discretionary` feature here — it is derived
+    # directly from the target column (category_l2), which is target leakage.
     merchant_feats["is_debit"] = (df["amount"] < 0).astype(float)
     merchant_feats["is_pending"] = df["is_pending"].astype(float) if "is_pending" in df.columns else 0.0
 
@@ -164,6 +162,8 @@ def _get_feature_columns(df: pd.DataFrame) -> list[str]:
         "merchant_name", "raw_description", "location_city",
         "location_country", "category_l1", "category_l2",
         "is_pending", "merchant_mcc", "account_type", "channel",
+        # Target-derived — must never be a model feature.
+        "is_discretionary",
     }
     cols = [c for c in df.columns if c not in exclude and df[c].dtype in ("float64", "float32", "int64", "int32", "uint8", "bool")]
     return cols
@@ -233,9 +233,12 @@ class ClassifierResult:
     tfidf: object = None          # TfidfVectorizer
     svd: object = None            # TruncatedSVD
     feature_cols: list[str] = field(default_factory=list)
+    accuracy: float = 0.0
+    weighted_f1: float = 0.0
     macro_f1: float = 0.0
     top3_accuracy: float = 0.0
     ece: float = 0.0
+    baseline_majority_accuracy: float = 0.0
     per_class_recall: dict = field(default_factory=dict)
 
 
@@ -371,6 +374,8 @@ def train_classifier(train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame)
     # ── Stage 2: XGBoost meta-learner on OOF probabilities ────────────────
     import xgboost as xgb
 
+    from src.utils.meta_input import build_meta_input
+
     logger.info("  Training XGBoost meta-learner …")
     meta_model = xgb.XGBClassifier(
         n_estimators=300,
@@ -383,9 +388,10 @@ def train_classifier(train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame)
     )
 
     # Meta features = base OOF probs + original features
-    X_meta_train = np.hstack([oof_probs, X_train])
+    # (canonical order: [probabilities | features] — shared with serving)
+    X_meta_train = build_meta_input(oof_probs, X_train)
     base_val_probs = lgb_model.predict_proba(X_val)
-    X_meta_val = np.hstack([base_val_probs, X_val])
+    X_meta_val = build_meta_input(base_val_probs, X_val)
 
     meta_model.fit(X_meta_train, y_train, eval_set=[(X_meta_val, y_val)], verbose=False)
 
@@ -394,16 +400,24 @@ def train_classifier(train: pd.DataFrame, val: pd.DataFrame, test: pd.DataFrame)
 
     # ── Evaluate on test set ──────────────────────────────────────────────
     base_test_probs = lgb_model.predict_proba(X_test)
-    X_meta_test = np.hstack([base_test_probs, X_test])
+    X_meta_test = build_meta_input(base_test_probs, X_test)
     y_pred = meta_model.predict(X_meta_test)
     y_prob = meta_model.predict_proba(X_meta_test)
 
+    result.accuracy = accuracy_score(y_test, y_pred)
+    result.weighted_f1 = f1_score(y_test, y_pred, average="weighted")
     result.macro_f1 = f1_score(y_test, y_pred, average="macro")
     result.top3_accuracy = _top_k_accuracy(y_test, y_prob, k=3)
     result.ece = _compute_ece(y_test, y_prob)
     result.per_class_recall = _per_class_recall(
         y_test, y_pred, result.label_encoder.classes_
     )
+
+    # Simple non-learned baseline: predict the majority class of the
+    # training split. This gives context for how much the model actually
+    # learns beyond class imbalance / label distribution.
+    majority_class = y_train[np.bincount(y_train).argmax()]
+    result.baseline_majority_accuracy = float((y_test == majority_class).mean())
 
     elapsed = time.perf_counter() - t0
     logger.info("  Classifier trained in %.1f s", elapsed)
@@ -762,10 +776,16 @@ def print_evaluation_report(
     t3_ok = clf_result.top3_accuracy >= 0.985
     ece_ok = clf_result.ece <= 0.05
 
+    print(f"│ Accuracy             │  {clf_result.accuracy:.4f}  │  —       │               │")
     print(f"│ Macro-F1             │  {clf_result.macro_f1:.4f}  │  ≥ 0.92  │ {'✓ PASS' if f1_ok else '✗ FAIL':13s} │")
+    print(f"│ Weighted-F1          │  {clf_result.weighted_f1:.4f}  │  —       │               │")
     print(f"│ Top-3 Accuracy       │  {clf_result.top3_accuracy:.4f}  │  ≥ 0.985 │ {'✓ PASS' if t3_ok else '✗ FAIL':13s} │")
     print(f"│ ECE (calibration)    │  {clf_result.ece:.4f}  │  ≤ 0.05  │ {'✓ PASS' if ece_ok else '✗ FAIL':13s} │")
+    print(f"│ Majority baseline    │  {clf_result.baseline_majority_accuracy:.4f}  │  —       │  reference    │")
     print("└──────────────────────┴──────────┴──────────┴───────────────┘")
+    print("\n  ⚠ SYNTHETIC-DATASET EVALUATION — metrics are computed on generated")
+    print("    mock data (deterministic merchant→category mapping, no real users).")
+    print("    They are NOT estimates of real-world customer performance.")
 
     # Per-class recalls (bottom 5)
     if clf_result.per_class_recall:
@@ -823,7 +843,7 @@ def print_evaluation_report(
     all_pass = f1_ok and mape_ok and accept_ok
     print("\n" + "=" * 78)
     if all_pass:
-        print("  ✓ ALL PRIMARY SPEC TARGETS MET — model is ready for deployment")
+        print("  ✓ ALL PRIMARY SPEC TARGETS MET — on SYNTHETIC data (not real-world evidence)")
     else:
         fails = []
         if not f1_ok:
@@ -837,9 +857,12 @@ def print_evaluation_report(
 
     return {
         "classification": {
+            "accuracy": clf_result.accuracy,
             "macro_f1": clf_result.macro_f1,
+            "weighted_f1": clf_result.weighted_f1,
             "top_3_accuracy": clf_result.top3_accuracy,
             "ece": clf_result.ece,
+            "baseline_majority_accuracy": clf_result.baseline_majority_accuracy,
         },
         "forecasting": {
             "mape": fc_result.mape,
@@ -939,6 +962,11 @@ def log_to_mlflow(
                 metrics["classification"]["macro_f1"] >= 0.92
                 and metrics["forecasting"]["mape"] <= 12.0
                 and metrics["budget"]["acceptance_simulation"] >= 60.0
+            )
+            mlflow.set_tag("dataset", "synthetic")
+            mlflow.set_tag(
+                "metrics_scope",
+                "synthetic-dataset evaluation; not real-world performance",
             )
             mlflow.set_tag("spec_targets_met", str(all_pass))
             mlflow.set_tag("model_stage", "candidate" if all_pass else "experimental")
