@@ -30,7 +30,7 @@ from src.data.models import Transaction, ValidationReport
 from src.serving.routes.classify import (
     ClassifyRequest,
     ClassifyResponse,
-    classify_transaction,
+    classify_transaction_with_history,
 )
 
 router = APIRouter(prefix="/consumer", tags=["CSV Ingestion"])
@@ -113,12 +113,22 @@ async def ingest_transactions_csv(request: Request) -> IngestCsvResponse:
             },
         )
 
-    # Chronological order keeps batch processing deterministic.
+    # Chronological order keeps batch processing deterministic. Per-user history
+    # is accumulated as we iterate so each transaction is classified with the
+    # strictly-prior transactions for that user — matching training semantics
+    # (z-score, rolling spend, 24h count, etc. computed over prior rows only).
     ordered = sorted(transactions, key=lambda t: t.timestamp)
     classified: list[dict[str, Any]] = []
+    user_history: dict[str, list[Transaction]] = {}
     for t in ordered:
-        res = await classify_transaction(ClassifyRequest(transaction=t), request)
+        uid = t.user_id
+        prior = user_history.get(uid, [])
+        res = await classify_transaction_with_history(
+            ClassifyRequest(transaction=t), request, history=prior
+        )
         classified.append(_classify_item(t, res))
+        # Current transaction becomes part of history for later rows of this user.
+        user_history.setdefault(uid, []).append(t)
 
     return IngestCsvResponse(
         total_rows=len(rows),

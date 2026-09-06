@@ -138,6 +138,31 @@ def _build_features(txn: Transaction, feature_cols: list[str]) -> dict[str, floa
 
 @router.post("/classify", response_model=ClassifyResponse)
 async def classify_transaction(request: ClassifyRequest, req: Request):
+    """HTTP entry point — history stays server-side, so it is always None here."""
+    return await _classify(request, req, history=None)
+
+
+async def classify_transaction_with_history(
+    request: ClassifyRequest,
+    req: Request,
+    history: list[Transaction] | None = None,
+) -> ClassifyResponse:
+    """Server-side entry point for batch ingestion (NOT exposed via HTTP).
+
+    ``history`` must contain the caller's strictly-prior transactions for the
+    same user. Kept out of the decorated route's signature because a second
+    Pydantic-model parameter would make FastAPI embed the request body and
+    break the public ``{"transaction": {...}}`` contract.
+    """
+    return await _classify(request, req, history=history)
+
+
+async def _classify(
+    request: ClassifyRequest,
+    req: Request,
+    *,
+    history: list[Transaction] | None,
+) -> ClassifyResponse:
     """
     Classify a single transaction into a spending category.
 
@@ -161,8 +186,16 @@ async def classify_transaction(request: ClassifyRequest, req: Request):
         text_cols = [c for c in all_cols if c.startswith("text_svd_")]
         num_cols = [c for c in all_cols if not c.startswith("text_svd_")]
 
-        feat_dict = _build_features(txn, num_cols)
-        X_num = np.array([[feat_dict.get(c, 0.0) for c in num_cols]], dtype=np.float64)
+        from src.services.feature_service import FeatureService
+
+        # C1 train/serve parity: the served feature vector MUST be produced by
+        # the same history-aware feature functions the training pipeline uses.
+        # ``history`` carries the strictly-prior transactions for this user
+        # (single-txn callers pass None → first-transaction semantics).
+        prior = history if history is not None else []
+        service = FeatureService(all_cols)
+        feat_dict = service.build(txn, prior)
+        X_num = np.array([[feat_dict[c] for c in num_cols]], dtype=np.float64)
 
         # ── 2. TF-IDF text features ──────────────────────────────
         if state.tfidf is not None and state.svd is not None:
