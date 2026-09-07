@@ -28,6 +28,8 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.models.recommender.budget_optimizer import BudgetOptimiser
+from src.services.financial_profile import UNCATEGORIZED_KEY
+from src.utils.constants import HARD_PROTECTED_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -296,12 +298,26 @@ class BudgetLiveRequest(BaseModel):
 
 @router.post("/budget/live")
 async def budget_live(body: BudgetLiveRequest):
-    """Run the real scipy.optimize.linprog constraint optimiser on actual category spend."""
+    """Run the real scipy.optimize.linprog constraint optimiser on actual category spend.
+
+    Hard protection is enforced regardless of the caller's category vocabulary:
+    the canonical 30-class ``HARD_PROTECTED_CATEGORIES`` (Rent/Mortgage,
+    Utilities, Home Insurance, Insurance Premiums, Loan Payments, Taxes) plus
+    every Planwisely bucket this route marks non-discretionary (e.g. "Housing",
+    which carries Rent/Mortgage + Home Insurance money) are floored at their
+    full baseline by ``BudgetOptimiser``, so neither the LP bounds nor the
+    "insufficient cuts" headroom fallback can ever reduce them. Uncategorized
+    spend is excluded from optimisation entirely (matches ``ScenarioEngine``).
+    """
     baselines: dict[str, float] = defaultdict(float)
     for t in body.transactions:
         if t.amount >= 0:
             continue
-        cat = t.category or "Other"
+        cat = (t.category or "").strip() or UNCATEGORIZED_KEY
+        if cat == UNCATEGORIZED_KEY:
+            # Canonical semantics: uncategorized spend is never handed to the
+            # optimiser — neither a protected category nor a cut target.
+            continue
         baselines[cat] += abs(t.amount)
 
     if not baselines:
@@ -309,12 +325,20 @@ async def budget_live(body: BudgetLiveRequest):
 
     is_discretionary = {cat: PLANWISELY_DISCRETIONARY.get(cat, True) for cat in baselines}
 
+    # Union is required: an explicit ``protected_categories`` REPLACES the
+    # optimiser's canonical default, so the 30-class protected names must be
+    # restated here alongside the Planwisely-labelled protected buckets.
+    protected = HARD_PROTECTED_CATEGORIES | {
+        cat for cat, disc in is_discretionary.items() if not disc
+    }
+
     optimiser = BudgetOptimiser()
     result = optimiser.optimise(
         income=body.income,
         savings_target=body.savings_target,
         category_baselines=dict(baselines),
         is_discretionary=is_discretionary,
+        protected_categories=protected,
     )
 
     return {
