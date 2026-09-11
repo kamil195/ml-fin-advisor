@@ -18,7 +18,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.serving.cache import CacheClient, CACHE_TTLS
-from src.serving.middleware import RateLimitMiddleware, generate_api_key, verify_api_key
+from src.serving.middleware import RateLimitMiddleware, generate_api_key
+from src.serving.auth import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,6 @@ def create_app() -> FastAPI:
         ),
         version="1.0.0",
         lifespan=lifespan,
-        dependencies=[Depends(verify_api_key)],
     )
 
     # CORS
@@ -146,12 +146,30 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(health_router, tags=["Health"])
-    app.include_router(classify_router, prefix="/v1", tags=["Classification"])
-    app.include_router(forecast_router, prefix="/v1", tags=["Forecasting"])
-    app.include_router(budget_router, prefix="/v1", tags=["Budget"])
-    app.include_router(live_router, tags=["Live Forecast & Budget"])
-    app.include_router(ingest_router, tags=["CSV Ingestion"])
-    app.include_router(advise_router, tags=["Decision Engine"])
+    app.include_router(
+        classify_router, prefix="/v1", tags=["Classification"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        forecast_router, prefix="/v1", tags=["Forecasting"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        budget_router, prefix="/v1", tags=["Budget"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        live_router, tags=["Live Forecast & Budget"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        ingest_router, tags=["CSV Ingestion"],
+        dependencies=[Depends(require_auth)],
+    )
+    app.include_router(
+        advise_router, tags=["Decision Engine"],
+        dependencies=[Depends(require_auth)],
+    )
 
     # ── Admin: generate a new API key (prints to stdout) ────────
     @app.get("/admin/generate-key", tags=["Admin"], include_in_schema=False)

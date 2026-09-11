@@ -34,21 +34,22 @@ _PUBLIC_PATHS: set[str] = {
     "/admin/generate-key",
 }
 
-# Consumer endpoints need their own auth (user_id based), not API key
-_PUBLIC_PREFIXES: tuple[str, ...] = (
-    "/consumer/",
-)
+# Public operational/documentation routes (and admin, in a later step).
+# Consumer financial routes are gated by the JWT auth dependency (require_auth),
+# not by this legacy API-key middleware.
+_PUBLIC_PREFIXES: tuple[str, ...] = ()
 
 # ── FastAPI security scheme ─────────────────────────────────
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 def _load_api_keys() -> set[str]:
-    """
-    Load valid API keys from the ``API_KEYS`` env var.
+    """Load valid API keys from the ``API_KEYS`` env var.
 
-    Keys are stored as a comma-separated list.  If the env var is
-    empty or unset, authentication is **disabled** (open access).
+    Keys are stored as a comma-separated list.  Fail-closed: when the env var
+    is empty or unset no keys are configured, so API-key authentication cannot
+    succeed (verification of each request instead falls through to the JWT
+    route dependency or returns 401).
     """
     raw = os.environ.get("API_KEYS", "").strip()
     if not raw:
@@ -65,26 +66,25 @@ async def verify_api_key(
     request: Request,
     api_key: str | None = Security(_api_key_header),
 ) -> None:
-    """
-    FastAPI dependency that enforces API-key authentication
-    and plan-based usage quotas.
+    """FastAPI dependency that enforces API-key authentication.
 
-    * If ``API_KEYS`` env var is empty/unset → open access (no auth).
-    * Public paths (health, docs, admin) are always open.
-    * Otherwise, ``X-API-Key`` header must contain a valid key.
+    * Public paths (health, docs, admin/generate-key) are always open.
+    * If ``API_KEYS`` env var is empty/unset -> fail closed: raises HTTP 401.
+    * Otherwise the ``X-API-Key`` header must contain a valid key (HTTP 401
+      when missing or invalid).
     """
     # Public paths — always open
     if request.url.path in _PUBLIC_PATHS:
         return
-    # Consumer endpoints use their own user_id gating
-    if request.url.path.startswith(_PUBLIC_PREFIXES):
-        return
 
     valid_keys = _load_api_keys()
 
-    # No keys configured — open access
+    # Fail-closed: empty/unset API_KEYS is NOT open access.
     if not valid_keys:
-        return
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required.",
+        )
 
     if not api_key:
         raise HTTPException(

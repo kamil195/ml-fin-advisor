@@ -46,8 +46,16 @@ _HEADERS = {"Content-Type": "text/csv; charset=utf-8"}  # params must be strippe
 
 
 @pytest.fixture
-def client():
+def client(auth_env, make_auth_headers):
+    """Authenticated test client (AUTH STEP 2).
+
+    ``/consumer/*`` routes are protected by ``require_auth``; the shared
+    ``auth_env`` fixture (conftest.py) sets ``SUPABASE_URL`` and routes JWKS
+    resolution to the local test key, so no real Supabase call is made.
+    Artifact-skip behaviour for missing ``models/serving/`` files is unchanged.
+    """
     with TestClient(create_app()) as c:
+        c.headers.update(make_auth_headers())
         yield c
 
 

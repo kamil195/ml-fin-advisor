@@ -175,7 +175,9 @@ def test_parse_valid_header():
 # ── Direct verify_token (unit) ───────────────────────────────────────────────
 
 
-def test_verify_token_valid(jwks_client, make_token):
+def test_verify_token_valid(jwks_client, make_token, monkeypatch):
+    # Fail-closed config guard (AUTH STEP 2): verification requires SUPABASE_URL.
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
     principal = verify_token(
         make_token(sub="user-42"),
         jwks_client=jwks_client,
@@ -187,8 +189,10 @@ def test_verify_token_valid(jwks_client, make_token):
 
 
 def test_verify_token_carries_email_but_sub_is_authoritative(
-    jwks_client, make_token
+    jwks_client, make_token, monkeypatch
 ):
+    # Fail-closed config guard (AUTH STEP 2): verification requires SUPABASE_URL.
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
     principal = verify_token(
         make_token(sub="user-42", email="someone@example.com"),
         jwks_client=jwks_client,

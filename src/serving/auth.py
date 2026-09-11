@@ -143,6 +143,12 @@ def verify_token(
     underlying crypto-library exceptions escape (nothing sensitive is exposed).
     """
     cfg = _AuthConfig.from_env()
+    if not cfg.supabase_url:
+        # Fail-closed: JWT authentication cannot be configured without the
+        # Supabase project URL. Return a 401 (not a startup crash).
+        raise AuthError(
+            "Supabase authentication is not configured: SUPABASE_URL is not set"
+        )
     client = jwks_client if jwks_client is not None else _get_jwks_client(cfg)
     aud = audience if audience is not None else cfg.audience
     iss = issuer if issuer is not None else cfg.issuer
@@ -176,9 +182,7 @@ async def require_auth(
     """FastAPI dependency: require a valid Supabase Bearer JWT.
 
     Returns the verified :class:`AuthPrincipal` or raises a generic HTTP 401.
-
-    NOTE: this dependency is NOT wired into any route yet. It is the isolated
-    authentication foundation; route protection lands in a later controlled step.
+    Applied at the router level to the financial routes in ``create_app()``.
     """
     try:
         token = parse_authorization_header(authorization)

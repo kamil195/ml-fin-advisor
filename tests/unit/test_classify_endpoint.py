@@ -39,7 +39,14 @@ TXN = {
 
 
 @pytest.fixture
-def client():
+def client(auth_env):
+    """Authenticated test client.
+
+    The endpoint tests call financial routes that are protected by
+    ``require_auth``; the shared ``auth_env`` fixture from conftest.py injects
+    the mocked Supabase JWT resolver and sets ``SUPABASE_URL`` so verification
+    succeeds. These tests never reach a real Supabase instance.
+    """
     # TestClient must be used as a context manager, otherwise lifespan never
     # runs and app.state.classifier is missing entirely.
     with TestClient(create_app()) as c:
@@ -51,14 +58,18 @@ def _skip_if_no_model(resp):
         pytest.skip("serving artifacts not present in models/serving/")
 
 
-def test_classify_returns_200(client):
-    resp = client.post("/v1/classify", json={"transaction": TXN})
+def test_classify_returns_200(client, make_auth_headers):
+    resp = client.post(
+        "/v1/classify", json={"transaction": TXN}, headers=make_auth_headers()
+    )
     _skip_if_no_model(resp)
     assert resp.status_code == 200, resp.text
 
 
-def test_classify_response_shape(client):
-    resp = client.post("/v1/classify", json={"transaction": TXN})
+def test_classify_response_shape(client, make_auth_headers):
+    resp = client.post(
+        "/v1/classify", json={"transaction": TXN}, headers=make_auth_headers()
+    )
     _skip_if_no_model(resp)
     body = resp.json()
 
@@ -78,7 +89,7 @@ def test_classify_response_shape(client):
     assert body["attribution_method"] in {"shap", "global_importance"}
 
 
-def test_classify_attributions_are_scalars(client):
+def test_classify_attributions_are_scalars(client, make_auth_headers):
     """
     Regression test for the 3-D SHAP array bug.
 
@@ -88,7 +99,9 @@ def test_classify_attributions_are_scalars(client):
     "The truth value of an array with more than one element is ambiguous",
     which the route converted into a 500.
     """
-    resp = client.post("/v1/classify", json={"transaction": TXN})
+    resp = client.post(
+        "/v1/classify", json={"transaction": TXN}, headers=make_auth_headers()
+    )
     _skip_if_no_model(resp)
     assert resp.status_code == 200, resp.text
 
@@ -98,7 +111,7 @@ def test_classify_attributions_are_scalars(client):
         assert isinstance(attr["value"], (int, float))
 
 
-def test_classify_works_without_shap_installed(client, monkeypatch):
+def test_classify_works_without_shap_installed(client, monkeypatch, make_auth_headers):
     """
     The fallback path is what production runs, since shap is not a declared
     serving dependency. It must return 200 and label itself honestly.
@@ -112,7 +125,9 @@ def test_classify_works_without_shap_installed(client, monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", _no_shap)
 
-    resp = client.post("/v1/classify", json={"transaction": TXN})
+    resp = client.post(
+        "/v1/classify", json={"transaction": TXN}, headers=make_auth_headers()
+    )
     _skip_if_no_model(resp)
     assert resp.status_code == 200, resp.text
 
@@ -123,10 +138,11 @@ def test_classify_works_without_shap_installed(client, monkeypatch):
     )
 
 
-def test_classify_live_returns_200_and_labels_attributions(client):
+def test_classify_live_returns_200_and_labels_attributions(client, make_auth_headers):
     resp = client.post(
         "/consumer/classify/live",
         json={"merchant": "Starbucks", "amount": -6.75, "date": "2026-03-02"},
+        headers=make_auth_headers(),
     )
     _skip_if_no_model(resp)
     assert resp.status_code == 200, resp.text
@@ -136,6 +152,10 @@ def test_classify_live_returns_200_and_labels_attributions(client):
     assert body["attribution_method"] in {"shap", "global_importance"}
 
 
-def test_classify_rejects_malformed_body(client):
-    resp = client.post("/v1/classify", json={"transaction": {"amount": -1.0}})
+def test_classify_rejects_malformed_body(client, make_auth_headers):
+    resp = client.post(
+        "/v1/classify",
+        json={"transaction": {"amount": -1.0}},
+        headers=make_auth_headers(),
+    )
     assert resp.status_code == 422
