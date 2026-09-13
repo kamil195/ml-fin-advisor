@@ -24,16 +24,26 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.models.recommender.budget_optimizer import BudgetOptimiser
 from src.services.financial_profile import UNCATEGORIZED_KEY
+from src.serving.auth import AuthPrincipal, require_auth
 from src.utils.constants import HARD_PROTECTED_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/consumer", tags=["Live Forecast & Budget"])
+
+
+def _short_week_label(ts) -> str:
+    """'Mar 5' style chart label.
+
+    Cross-platform: Python's ``strftime('%b %-d')`` uses the POSIX-only ``-``
+    flag and raises ``ValueError: Invalid format string`` on Windows.
+    """
+    return f"{ts.strftime('%b')} {ts.day}"
 
 
 # -- Category mapping: 30-class model taxonomy <-> Planwisely's 10 categories --
@@ -145,8 +155,16 @@ class ClassifyLiveRequest(BaseModel):
 
 
 @router.post("/classify/live")
-async def classify_live(body: ClassifyLiveRequest, request: Request):
-    """Run the real trained classifier on a single merchant/amount/date."""
+async def classify_live(
+    body: ClassifyLiveRequest,
+    request: Request,
+    principal: AuthPrincipal = Depends(require_auth),
+):
+    """Run the real trained classifier on a single merchant/amount/date.
+
+    Ownership (AUTH STEP 3): the transaction's identity always comes from the
+    authenticated subject; the request carries no user identity.
+    """
     from src.data.models import Transaction
     from src.serving.routes.classify import ClassifyRequest, classify_transaction
     from src.utils.constants import AccountType, Channel
@@ -157,7 +175,7 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
         ts = datetime.now(timezone.utc)
 
     txn = Transaction(
-        user_id="planwise-live",
+        user_id=principal.sub,
         timestamp=ts,
         amount=-abs(body.amount),
         merchant_name=body.merchant,
@@ -167,7 +185,9 @@ async def classify_live(body: ClassifyLiveRequest, request: Request):
         raw_description=body.merchant,
     )
 
-    result = await classify_transaction(ClassifyRequest(transaction=txn), request)
+    result = await classify_transaction(
+        ClassifyRequest(transaction=txn), request, principal
+    )
     data = result.model_dump(mode="json")
 
     predicted_l2 = data["category_l2"]
@@ -196,8 +216,15 @@ class ForecastLiveRequest(BaseModel):
 
 
 @router.post("/forecast/live")
-async def forecast_live(body: ForecastLiveRequest):
-    """Fit Prophet per category on the caller's real transaction history."""
+async def forecast_live(
+    body: ForecastLiveRequest,
+    principal: AuthPrincipal = Depends(require_auth),
+):
+    """Fit Prophet per category on the caller's real transaction history.
+
+    Ownership (AUTH STEP 3): the fitted/predicted series is always scoped to
+    the authenticated subject; the request carries no user identity.
+    """
     from src.models.forecaster.prophet_model import ProphetModel
 
     rows = []
@@ -209,7 +236,7 @@ async def forecast_live(body: ForecastLiveRequest):
             d = datetime.strptime(t.date, "%Y-%m-%d")
         except ValueError:
             continue
-        rows.append({"user_id": "planwise-live", "timestamp": d, "amount": t.amount, "category_l2": cat})
+        rows.append({"user_id": principal.sub, "timestamp": d, "amount": t.amount, "category_l2": cat})
 
     if not rows:
         raise HTTPException(status_code=422, detail="No spend transactions to forecast from.")
@@ -222,8 +249,8 @@ async def forecast_live(body: ForecastLiveRequest):
     weekly_projected = [0.0] * horizon_weeks  # p50, summed across categories, by future week index
     for cat in categories:
         model = ProphetModel()
-        model.fit(df, user_id="planwise-live", category=cat)
-        fc = model.predict(user_id="planwise-live", category=cat, horizon_weeks=horizon_weeks)
+        model.fit(df, user_id=principal.sub, category=cat)
+        fc = model.predict(user_id=principal.sub, category=cat, horizon_weeks=horizon_weeks)
 
         if not fc.p50:
             continue
@@ -261,7 +288,7 @@ async def forecast_live(body: ForecastLiveRequest):
     for week_start, amt in weekly_actual.items():
         cum += amt
         weekly_series.append({
-            "label": week_start.strftime("%b %-d"),
+            "label": _short_week_label(week_start),
             "actual": round(cum, 2),
             "projected": round(cum, 2),
         })
@@ -269,7 +296,7 @@ async def forecast_live(body: ForecastLiveRequest):
     last_actual_date = weekly_actual.index.max() if len(weekly_actual) else pd.Timestamp.now()
     for i, v in enumerate(weekly_projected):
         cum += v
-        week_label = (last_actual_date + pd.Timedelta(weeks=i + 1)).strftime("%b %-d")
+        week_label = _short_week_label(last_actual_date + pd.Timedelta(weeks=i + 1))
         weekly_series.append({
             "label": week_label,
             "actual": None,

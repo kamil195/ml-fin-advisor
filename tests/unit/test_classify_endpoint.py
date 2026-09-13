@@ -26,7 +26,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
 
 TXN = {
-    "user_id": "test_user",
+    "user_id": "user-123",  # authenticated JWT sub (AUTH STEP 3)
     "timestamp": "2026-03-02T14:30:00",
     "amount": -6.75,
     "currency": "USD",

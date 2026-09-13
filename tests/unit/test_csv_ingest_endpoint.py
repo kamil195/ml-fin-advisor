@@ -25,7 +25,7 @@ CSV_HEADER = "user_id,timestamp,amount,currency,merchant_name,merchant_mcc,accou
 
 def _row(**over) -> str:
     base = {
-        "user_id": "u-csv",
+        "user_id": "user-123",  # authenticated JWT sub (AUTH STEP 3)
         "timestamp": "2026-03-05T12:00:00",
         "amount": "-100.0",
         "currency": "USD",

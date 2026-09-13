@@ -38,10 +38,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, model_validator
 
 from src.data.models import DecisionResult, ScenarioParams, Transaction
+from src.serving.auth import AuthPrincipal, require_auth
 from src.services.decision_engine import advise as advise_engine
 from src.utils.constants import (
     CATEGORY_HIERARCHY,
@@ -144,13 +145,32 @@ def _to_gated_transaction(p: ClassifiedTransactionIn) -> Transaction:
 
 
 @router.post("/advise", response_model=DecisionResult)
-def advise_endpoint(req: AdviseRequest) -> DecisionResult:
-    """Deterministic financial decision for the posted classified history."""
+def advise_endpoint(
+    req: AdviseRequest,
+    principal: AuthPrincipal = Depends(require_auth),
+) -> DecisionResult:
+    """Deterministic financial decision for the posted classified history.
+
+    Ownership (AUTH STEP 3): every posted transaction and the optional
+    top-level ``user_id`` must belong to the authenticated subject (403
+    otherwise). The engine always receives the authoritative ``principal.sub``.
+    """
+    for p in req.transactions:
+        if p.user_id != principal.sub:
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: transaction user_id does not match the authenticated user.",
+            )
+    if req.user_id is not None and req.user_id != principal.sub:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: user_id does not match the authenticated user.",
+        )
     transactions = [_to_gated_transaction(p) for p in req.transactions]
     return advise_engine(
         transactions,
         req.params,
-        user_id=req.user_id,
+        user_id=principal.sub,
         period=req.period,
         observation_days=req.observation_days,
         liquid_buffer=req.liquid_buffer,

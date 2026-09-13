@@ -9,9 +9,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.data.models import CategoryForecast, ForecastResult
+from src.serving.auth import AuthPrincipal, require_auth
 from src.utils.constants import CategoryL2
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ router = APIRouter()
 async def get_forecast(
     user_id: str,
     req: Request,
+    principal: AuthPrincipal = Depends(require_auth),
     horizon: int = Query(default=30, ge=7, le=90, description="Forecast horizon in days"),
     categories: str = Query(default="all", description="Comma-separated category filter or 'all'"),
 ):
@@ -31,15 +33,25 @@ async def get_forecast(
 
     Returns per-category p10/p50/p90 forecasts, trend indicators,
     and regime annotations.
+
+    Ownership (AUTH STEP 3): the requested ``user_id`` must equal the
+    authenticated subject. Processing, responses and cache keys always use
+    ``principal.sub`` (the path value merely has to match it).
     """
+    if user_id != principal.sub:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: cannot access another user's forecast.",
+        )
+    uid = principal.sub
     state = req.app.state
     cache = state.cache
 
     # Check cache first (key includes horizon and category filter)
-    cache_key_parts = [user_id, str(horizon), categories]
+    cache_key_parts = [uid, str(horizon), categories]
     cached = cache.get("forecasts", *cache_key_parts)
     if cached is not None:
-        logger.info("Cache HIT for forecast %s", user_id)
+        logger.info("Cache HIT for forecast %s", uid)
         return ForecastResult(**cached)
 
     try:
@@ -115,7 +127,7 @@ async def get_forecast(
         total_p90 = sum(f.p90 for f in response_forecasts)
 
         result = ForecastResult(
-            user_id=user_id,
+            user_id=uid,
             generated_at=datetime.now(timezone.utc),
             horizon_days=horizon,
             forecasts=response_forecasts,

@@ -33,7 +33,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 # ── shared payloads ──────────────────────────────────────────────────────────
 
 TXN = {
-    "user_id": "u-1",
+    "user_id": "user-123",  # must equal the authenticated JWT sub (AUTH STEP 3)
     "timestamp": "2026-03-05T12:00:00",
     "amount": -100.0,
     "currency": "USD",
@@ -46,7 +46,7 @@ TXN = {
 
 def _advise_txn(**over) -> dict:
     base = {
-        "user_id": "u-1",
+        "user_id": "user-123",  # authenticated JWT sub (AUTH STEP 3)
         "timestamp": "2026-03-05T12:00:00",
         "amount": -100.0,
         "merchant_name": "Merchant",
@@ -85,14 +85,14 @@ def _advise_body() -> dict:
 
 CSV_BODY = (
     "user_id,timestamp,amount,currency,merchant_name,merchant_mcc,account_type,channel\n"
-    "u-1,2026-03-05T12:00:00,-100.0,USD,FreshMart,5411,CHECKING,POS\n"
+    "user-123,2026-03-05T12:00:00,-100.0,USD,FreshMart,5411,CHECKING,POS\n"
 )
 
 # (method, path, json-body, raw-body) for every financial route under protection
 PROTECTED_ROUTES = [
     ("POST", "/v1/classify", {"transaction": TXN}, None),
-    ("GET", "/v1/forecast/some-user", None, None),
-    ("GET", "/v1/budget/some-user", None, None),
+    ("GET", "/v1/forecast/user-123", None, None),
+    ("GET", "/v1/budget/user-123", None, None),
     ("POST", "/consumer/advise", _advise_body(), None),
     ("POST", "/consumer/transactions/ingest-csv", None, CSV_BODY),
     ("POST", "/consumer/classify/live", {"transaction": TXN}, None),
@@ -248,7 +248,8 @@ def test_valid_jwt_reaches_financial_routes_with_empty_api_keys(app_client):
         headers = {"Content-Type": "text/csv"} if raw else None
         r = app_client.request(method, path, json=json_body, content=raw, headers=headers)
         assert r.status_code != 401, f"{method} {path} blocked: {r.status_code}"
-        assert r.status_code in (200, 422, 503), f"{method} {path} → {r.status_code}"
+        # 404 = subject not present in the per-user budget artifact (no fallback).
+        assert r.status_code in (200, 404, 422, 503), f"{method} {path} → {r.status_code}"
 
 
 def test_v1_classify_passes_jwt_layer_with_empty_api_keys(app_client):
@@ -259,27 +260,39 @@ def test_v1_classify_passes_jwt_layer_with_empty_api_keys(app_client):
 
 
 def test_v1_forecast_ownership_param_reaches_handler(app_client):
-    """Valid JWT + empty API_KEYS reaches GET /v1/forecast/{user_id}.
+    """Valid JWT (sub=user-123) reaches GET /v1/forecast/{user_id} for its OWN
+    path — the caller-controlled identity is no longer accepted.
 
-    200 = serving artifacts present on this machine; 503 = artifacts absent
-    (fresh checkout). Both prove the request passed the JWT layer — never 401.
+    200 = serving artifacts present; 503 = artifacts absent (fresh checkout).
+    Both prove the request passed the JWT layer and the ownership gate.
     """
-    r = app_client.get("/v1/forecast/some-user")
+    r = app_client.get("/v1/forecast/user-123")
     assert r.status_code in (200, 503)
     if r.status_code == 503:
         assert "Forecast data not available" in r.json()["detail"]
 
+    # Cross-user path is refused regardless of artifacts (AUTH STEP 3).
+    assert app_client.get("/v1/forecast/some-user").status_code == 403
+
 
 def test_v1_budget_ownership_param_reaches_handler(app_client):
-    """Valid JWT + empty API_KEYS reaches GET /v1/budget/{user_id}.
+    """Valid JWT (sub=user-123) reaches GET /v1/budget/{user_id} for its OWN
+    path — the caller-controlled identity is no longer accepted.
 
-    200 = serving artifacts present on this machine; 503 = artifacts absent
-    (fresh checkout). Both prove the request passed the JWT layer — never 401.
+    200 = exact-match entry for the subject in the serving artifact;
+    404 = subject is not in the per-user artifact (no fallback);
+    503 = artifacts absent (fresh checkout);
+    all prove the request passed the JWT layer and the ownership gate.
     """
-    r = app_client.get("/v1/budget/some-user")
-    assert r.status_code in (200, 503)
+    r = app_client.get("/v1/budget/user-123")
+    assert r.status_code in (200, 404, 503)
     if r.status_code == 503:
         assert "Budget data not available" in r.json()["detail"]
+    if r.status_code == 404:
+        assert "No budget data for user" in r.json()["detail"]
+
+    # Cross-user path is refused regardless of artifacts (AUTH STEP 3).
+    assert app_client.get("/v1/budget/some-user").status_code == 403
 
 
 def test_consumer_advise_full_success_with_valid_jwt(app_client):

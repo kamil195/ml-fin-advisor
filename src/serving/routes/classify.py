@@ -13,10 +13,11 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from src.data.models import ClassificationResult, FraudAnalysis, Transaction
+from src.serving.auth import AuthPrincipal, require_auth
 from src.features.numerical_features import calculate_velocity
 from src.utils.constants import (
     CategoryL1,
@@ -137,8 +138,22 @@ def _build_features(txn: Transaction, feature_cols: list[str]) -> dict[str, floa
 
 
 @router.post("/classify", response_model=ClassifyResponse)
-async def classify_transaction(request: ClassifyRequest, req: Request):
-    """HTTP entry point — history stays server-side, so it is always None here."""
+async def classify_transaction(
+    request: ClassifyRequest,
+    req: Request,
+    principal: AuthPrincipal = Depends(require_auth),
+):
+    """HTTP entry point — history stays server-side, so it is always None here.
+
+    Ownership (AUTH STEP 3): the transaction's ``user_id`` must equal the
+    authenticated subject. A caller cannot classify a transaction attributed
+    to another user (403).
+    """
+    if request.transaction.user_id != principal.sub:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: transaction user_id does not match the authenticated user.",
+        )
     return await _classify(request, req, history=None)
 
 

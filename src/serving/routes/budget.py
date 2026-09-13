@@ -11,9 +11,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from src.data.models import BudgetRecommendation, BudgetResult, SHAPFeature
+from src.serving.auth import AuthPrincipal, require_auth
 from src.models.recommender.explanations import ExplanationEngine
 from src.utils.constants import CategoryL2, DISCRETIONARY_CATEGORIES
 
@@ -25,20 +26,35 @@ _explanation_engine = ExplanationEngine()
 
 
 @router.get("/budget/{user_id}", response_model=BudgetResult)
-async def get_budget(user_id: str, req: Request):
+async def get_budget(
+    user_id: str,
+    req: Request,
+    principal: AuthPrincipal = Depends(require_auth),
+):
     """
     Retrieve personalised budget recommendations for a user.
 
     Each recommendation includes SHAP feature attributions,
     an anchor rule, and a counterfactual explanation.
+
+    Ownership (AUTH STEP 3): the requested ``user_id`` must equal the
+    authenticated subject. Processing, responses and cache keys always use
+    ``principal.sub`` (the path value merely has to match it); lookup is
+    exact and never falls back to another user's record.
     """
+    if user_id != principal.sub:
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: cannot access another user's budget.",
+        )
+    uid = principal.sub
     state = req.app.state
     cache = state.cache
 
     # Check cache
-    cached = cache.get("budgets", user_id)
+    cached = cache.get("budgets", uid)
     if cached is not None:
-        logger.info("Cache HIT for budget %s", user_id)
+        logger.info("Cache HIT for budget %s", uid)
         return BudgetResult(**cached)
 
     try:
@@ -49,24 +65,14 @@ async def get_budget(user_id: str, req: Request):
                 detail="Budget data not available. Run the training pipeline first.",
             )
 
-        # Find user-specific budget or use aggregate
+        # AUTH STEP 3: exact, owner-scoped lookup only. No prefix matching and
+        # no first-user demo fallback — either could hand one user another
+        # user's budget.
         user_budgets = budget_data.get("user_budgets", {})
-
-        # Try matching user ID prefix
-        user_budget = None
-        for uid, bdata in user_budgets.items():
-            if uid == user_id or uid.startswith(user_id[:12]):
-                user_budget = bdata
-                break
-
-        # If no exact match, use first available user as demo
-        if user_budget is None and user_budgets:
-            first_key = next(iter(user_budgets))
-            user_budget = user_budgets[first_key]
-            logger.info("User %s not found, using %s as demo", user_id, first_key)
+        user_budget = user_budgets.get(uid)
 
         if user_budget is None:
-            raise HTTPException(status_code=404, detail=f"No budget data for user {user_id}")
+            raise HTTPException(status_code=404, detail=f"No budget data for user {uid}")
 
         income = user_budget.get("income", 0)
         total_budget = user_budget.get("total_budget", 0)
@@ -135,7 +141,7 @@ async def get_budget(user_id: str, req: Request):
         )
 
         result = BudgetResult(
-            user_id=user_id,
+            user_id=uid,
             period=datetime.now(timezone.utc).strftime("%Y-%m"),
             income_estimate=round(income, 2),
             savings_target=savings_target,
@@ -143,7 +149,7 @@ async def get_budget(user_id: str, req: Request):
         )
 
         # Cache the result
-        cache.set("budgets", user_id, value=result.model_dump(mode="json"))
+        cache.set("budgets", uid, value=result.model_dump(mode="json"))
 
         return result
 

@@ -22,11 +22,12 @@ import csv
 import io
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from src.data.ingestion import validate_and_parse_rows
 from src.data.models import Transaction, ValidationReport
+from src.serving.auth import AuthPrincipal, require_auth
 from src.serving.routes.classify import (
     ClassifyRequest,
     ClassifyResponse,
@@ -71,7 +72,10 @@ def _classify_item(t: Transaction, res: ClassifyResponse) -> dict[str, Any]:
 
 
 @router.post("/transactions/ingest-csv", response_model=IngestCsvResponse)
-async def ingest_transactions_csv(request: Request) -> IngestCsvResponse:
+async def ingest_transactions_csv(
+    request: Request,
+    principal: AuthPrincipal = Depends(require_auth),
+) -> IngestCsvResponse:
     """Raw-body CSV upload (no multipart dependency required).
 
     Send the CSV text as the request body with ``Content-Type: text/csv``;
@@ -112,6 +116,16 @@ async def ingest_transactions_csv(request: Request) -> IngestCsvResponse:
                 "report": report.model_dump(mode="json"),
             },
         )
+
+    # AUTH STEP 3: every transaction belongs to the authenticated subject.
+    # A caller-provided CSV user identity is never trusted; any row claiming a
+    # different owner is rejected outright (403) before further processing.
+    for txn in transactions:
+        if txn.user_id != principal.sub:
+            raise HTTPException(
+                status_code=403,
+                detail="Forbidden: CSV contains transactions for another user.",
+            )
 
     # Chronological order keeps batch processing deterministic. Per-user history
     # is accumulated as we iterate so each transaction is classified with the

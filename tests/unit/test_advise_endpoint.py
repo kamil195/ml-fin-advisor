@@ -25,7 +25,7 @@ pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def _txn(**over) -> dict:
     """A high-confidence (0.95) debit/credit with overridable fields."""
     base = {
-        "user_id": "u-advise",
+        "user_id": "user-123",  # authenticated JWT sub (AUTH STEP 3)
         "timestamp": "2026-03-05T12:00:00",
         "amount": -100.0,
         "merchant_name": "Merchant",
