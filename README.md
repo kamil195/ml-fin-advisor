@@ -1,124 +1,93 @@
-# ML Fin-Advisor
+# Planwisely
 
-A behavior-aware personal-finance machine-learning system that classifies transactions, forecasts future expenses, and generates interpretable budget recommendations through a FastAPI service and lightweight frontend.
+**Know what you can safely spend before payday.**
 
-## Project overview
+Pakistan-first B2C financial intelligence for salaried professionals (ages 22–40).
 
-ML Fin-Advisor is an end-to-end educational ML engineering project focused on personal-finance analytics. It combines transaction categorization, time-series forecasting, behavioral features, recommendation logic, model serving, testing, and deployment configuration in one repository.
+---
 
-The current implementation uses synthetic or demonstration data for development and portfolio purposes. It is not connected to real bank accounts and should not be treated as regulated financial advice.
+## What is Planwisely?
 
-## Core capabilities
+Planwisely combines **specialized machine learning** with **deterministic financial logic** to produce authoritative financial intelligence.
 
-- Transaction classification from merchant text and numerical features
-- Expense forecasting across configurable future horizons
-- Budget recommendation generation
-- Behavioral and temporal feature engineering
-- Confidence scores and model outputs suitable for explanation
-- Consumer registration, usage history, and subscription-status endpoints
-- API-key authentication and request-rate limiting
-- Lemon Squeezy webhook integration for subscription lifecycle events
-- Redis-backed caching with an in-memory fallback
-- Docker, Docker Compose, Render, and development-container support
-- Unit tests and serving checks
+- **Specialized ML:** Transaction classification, expense forecasting, behavioral features
+- **Deterministic Logic:** Budget optimization, scenario analysis, decision recommendations
+- **Optional LLM (Future):** Interface/explanation layer — never the source of financial truth
 
-## Machine-learning components
+The LLM is **not required** for the system to be "AI." Planwisely already uses specialized AI/ML.
 
-The repository includes:
+---
 
-- TF-IDF text vectorization
-- Dimensionality reduction using SVD
-- Numerical feature scaling
-- LightGBM-based transaction classification
-- Metadata and label encoders
-- Forecasting and budget-result artifacts
-- Training, feature, and inference pipelines
-- Classification, forecasting, recommendation, and fairness evaluation modules
-
-Pretrained demonstration artifacts are stored in `models/serving/` so the API can be tested without retraining the entire system.
-
-## Architecture
+## Core Intelligence Pipeline
 
 ```text
-Raw or synthetic transactions
-        |
-        v
-Data ingestion and validation
-        |
-        v
-Feature engineering
-  - merchant text features
-  - numerical features
-  - temporal and behavioral features
-        |
-        v
-ML modules
-  - transaction classifier
-  - expense forecast
-  - budget recommender
-        |
-        v
-FastAPI serving layer
-        |
-        +--> lightweight frontend
-        +--> Redis or in-memory cache
-        +--> subscription and webhook services
+Financial Data
+  → Transaction Intelligence
+  → Financial Profile
+  → Behavior / Forecast / Budget
+  → Scenario Engine
+  → Decision Layer
+  → Recommended Actions
 ```
 
-A more detailed technical specification is available in [`SPEC.md`](SPEC.md).
+---
 
-## Repository structure
+## Current Capabilities
+
+| Capability | Status |
+|---|---|
+| Transaction Classification | LightGBM, 30 categories, 157 features |
+| Expense Forecasting | Prophet-based (global/demo/static artifact) |
+| Budget Optimization | Constraint-based with hard-protected categories |
+| Scenario Analysis | Deterministic |
+| Decision Recommendations | Deterministic |
+| CSV Ingestion | With validation and ownership enforcement |
+| Authentication | Supabase JWT (Steps 1–3 committed) |
+| Safe-to-Spend | Planned |
+| AI Copilot | Future |
+
+---
+
+## Architecture Overview
 
 ```text
-configs/                 Model, feature, fairness, and serving settings
-frontend/                Lightweight browser-based interface
-infrastructure/docker/   Serving-container configuration
-models/serving/          Demonstration model artifacts
-pipelines/               Training, feature, and inference pipelines
-src/data/                Schemas, ingestion, and synthetic-data generation
-src/evaluation/          Metrics, comparisons, and fairness auditing
-src/features/            Numerical, temporal, and behavioral features
-src/serving/             FastAPI application, middleware, and routes
-tests/                   Unit and integration-oriented tests
-Dockerfile               Main container definition
-docker-compose.yml       API and Redis services
-render.yaml              Render deployment configuration
-SPEC.md                  Full system specification
+User → Frontend → Supabase Auth → JWT → FastAPI → require_auth
+    → AuthPrincipal.sub → Ownership Enforcement → Financial Services
 ```
 
-## API endpoints
+See [ARCHITECTURE.md](ARCHITECTURE.md) for trust boundaries and data flows.
 
-The service includes endpoints for:
+---
 
-- `POST /classify` — classify a transaction
-- `GET /forecast/{user_id}` — retrieve an expense forecast
-- `GET /budget/{user_id}` — retrieve budget recommendations
-- `POST /consumer/register` — register a consumer user
-- `POST /consumer/analyse` — analyse consumer transactions
-- `GET /consumer/history/{user_id}` — retrieve analysis history
-- `GET /health` — service health check
-- `GET /ready` — model-readiness check
-- `POST /webhooks/lemonsqueezy` — process subscription events
+## Repository / Runtime Overview
 
-Interactive API documentation is available at `/docs` while the service is running.
+```text
+src/
++-- data/           Schemas, ingestion, synthetic-data
++-- evaluation/     Metrics, comparisons, auditing
++-- features/       Numerical, temporal, behavioral, text features
++-- models/         ML models (classifier, forecaster, recommender)
++-- serving/        FastAPI app, middleware, routes, auth, cache
++-- services/       Financial logic (profile, scenario, decision)
++-- utils/          Constants, logging, privacy
+tests/              Unit and integration tests
+models/serving/     Demonstration model artifacts
+frontend/           Browser-based interface
+infrastructure/     Docker, deployment
+```
 
-## Local setup
+---
 
-### 1. Create a virtual environment
+## Getting Started
+
+### 1. Create a virtual environment and install dependencies
 
 ```bash
 python -m venv .venv
-```
-
-Activate it, then install the dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
 ### 2. Configure environment variables
-
-Copy the example file:
 
 ```bash
 cp .env.example .env
@@ -126,7 +95,7 @@ cp .env.example .env
 
 Replace placeholder values with your own local credentials. Never commit the real `.env` file.
 
-### 3. Generate demonstration data
+### 3. Generate demonstration data (optional)
 
 ```bash
 python -m src.data.mock_generator
@@ -144,56 +113,191 @@ pytest tests/unit/ -v
 uvicorn src.serving.app:app --reload
 ```
 
-Then open:
+Interactive API documentation is available at `http://localhost:8000/docs`.
 
-```text
-http://localhost:8000/docs
-```
-
-## Docker setup
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-This starts the API and Redis services. The API is exposed on port `8000`.
+This starts the API and Redis services; the API is exposed on port `8000`.
 
-## Security notes
+---
 
-- Real API keys, payment secrets, passwords, and `.env` files must never be committed.
-- Authentication should be enabled in deployment by setting `API_KEYS`.
-- Lemon Squeezy webhook verification should always use a configured webhook secret in production.
-- CORS, public administrative routes, Redis exposure, and rate limits should be tightened before any real deployment.
-- Model artifacts should only be loaded from trusted sources because serialized Python model files can execute code during loading.
+## API Overview
 
-## Current status
+### Protected Endpoints (require Supabase JWT)
 
-The repository demonstrates a broad ML engineering workflow and includes serving, subscription, deployment, and frontend components. It remains a portfolio and development project rather than a production financial product. Before real-world use, it would require persistent user storage, stronger authentication, encrypted secrets management, audited financial logic, monitoring, privacy controls, and compliance review.
+| Method | Path | Description |
+|---|---|---|
+| POST | `/v1/classify` | Classify a transaction |
+| GET | `/v1/forecast/{user_id}` | Expense forecast |
+| GET | `/v1/budget/{user_id}` | Budget recommendations |
+| POST | `/consumer/advise` | Financial advice |
+| POST | `/consumer/transactions/ingest-csv` | CSV ingestion |
+| POST | `/consumer/classify/live` | Live classification |
+| POST | `/consumer/forecast/live` | Live forecast |
+| POST | `/consumer/budget/live` | Live budget |
 
-## Limitations
+### Public Endpoints
 
-- Uses synthetic or demonstration data
-- No live bank-data integration
-- Subscription and consumer stores are not yet designed as durable production databases
-- Forecast and recommendation quality has not been validated on a large real-world user dataset
-- Outputs are educational and should not be interpreted as professional financial advice
+| Method | Path |
+|---|---|
+| GET | `/health`, `/ready`, `/docs`, `/openapi.json`, `/redoc`, `/favicon.ico` |
+| POST | `/admin/generate-key` (**KNOWN SECURITY ISSUE**) |
 
-## Future improvements
+---
 
-- Add secure authentication and persistent user accounts
-- Add PostgreSQL-backed storage
-- Add encrypted transaction ingestion
-- Add model monitoring and drift detection
-- Add explainability dashboards
-- Add rolling forecast evaluation
-- Add CI/CD and automated security scanning
-- Validate performance on consented real-world data
+## Authentication
+
+Supabase JWT (RS256) verified via JWKS. Fail-closed: missing/invalid token → 401.
+
+| Component | File |
+|---|---|
+| AuthPrincipal | `src/serving/auth.py` |
+| require_auth | `src/serving/auth.py` |
+| Auth middleware | `src/serving/middleware.py` |
+
+---
+
+## Authorization / User Isolation
+
+**Fundamental invariant:** `AuthPrincipal.sub` = financial resource owner
+
+- Path `{user_id}` must equal `principal.sub` → 403 on mismatch
+- Body `user_id` must match `principal.sub` → 403 on mismatch
+- CSV rows must match `principal.sub` → 403 on mismatch
+- Cache keys are namespaced by `principal.sub`
+- Budget lookup is exact (no prefix/fallback)
+
+---
+
+## Classification
+
+LightGBM, 30 L2 categories, 157 features.
+
+**Synthetic evaluation (NOT production metrics):**
+
+| Metric | Value |
+|---|---|
+| Accuracy | 89.10% |
+| Macro-F1 | 85.56% |
+| Weighted-F1 | 89.11% |
+| Top-3 | 98.07% |
+| ECE | 7.81% |
+
+---
+
+## Forecasting
+
+Prophet-based. **LIMITATION:** Current artifact is global/demo/static — NOT genuinely personalized. Authorization isolation only.
+
+MAPE: ~6.10% (synthetic/demo data).
+
+---
+
+## Budget Optimisation
+
+Constraint-based (scipy.optimize.linprog).
+
+**Hard-protected categories:** Rent/Mortgage, Utilities, Home Insurance, Insurance Premiums, Loan Payments, Taxes.
+
+Acceptance: ~78.86% (synthetic/demo).
+
+---
+
+## Scenario / Decision Systems
+
+Deterministic engines. No randomness, no LLM calls. All numbers from underlying services.
+
+---
+
+## Current Security Status
+
+| Item | Status |
+|---|---|
+| Auth Step 1 (JWT foundation) | Committed locally, not pushed |
+| Auth Step 2 (protected routes) | Committed locally, not pushed |
+| Auth Step 3 (ownership/isolation) | Committed locally, not pushed |
+| /admin/generate-key | Public — known issue |
+| Rate limiting | Not implemented |
+| Privacy policy / terms | Not implemented |
+| Security headers | Not implemented |
+
+---
+
+## Testing
+
+| Suite | Result |
+|---|---|
+| test_ownership.py | 22 passed |
+| test_auth.py | 20 passed |
+| test_auth_routes.py | 21 passed |
+| test_classify_endpoint.py | 7 passed |
+| test_csv_ingest_endpoint.py | 10 passed |
+| test_advise_endpoint.py | 12 passed |
+| **Full unit suite** | **224 passed, 1 skipped** |
+| compileall | exit 0 |
+
+---
+
+## Current Limitations
+
+- Forecast artifact is global/demo/static (not personalized)
+- No production database
+- No rate limiting
+- No privacy policy/terms
+- /admin/generate-key is public
+- No security headers
+- No observability/monitoring
+- Outputs are educational/portfolio demonstrations on synthetic/demo data — not professional financial advice; not connected to real bank accounts
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| SPEC.md | Technical implementation source of truth |
+| README.md | Repository/developer entry point (this file) |
+| ARCHITECTURE.md | Architecture, trust boundaries, data flows |
+| ROADMAP.md | Dependency-driven execution roadmap |
+| FRONTEND_DESIGN_SPEC.md | Frontend/UI/UX design source of truth |
+| CHANGELOG.md | Verified implementation history |
+
+---
+
+## Future Direction
+
+- Safe-to-Spend calculation
+- AI Copilot (provider-agnostic)
+- Financial Intelligence API
+- Agent interoperability
+- International expansion (Pakistan-first)
+
+---
+
+## Development Principles
+
+1. Specialized ML + deterministic logic = authoritative financial intelligence
+2. LLM is optional, never the source of financial truth
+3. Authorization isolation: JWT sub is authoritative
+4. Fail-closed by default
+5. Deterministic financial calculations
+6. Honest representation of missing information
+
+---
 
 ## Author
 
-**Muhammad Kamil Shah**  
+**Muhammad Kamil Shah**
 BS Data Science
 
 ## License
 
 See the repository license file for usage terms.
+
+---
+
+**Status: Active Development — Not Launch Ready**

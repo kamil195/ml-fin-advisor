@@ -1,1051 +1,529 @@
-# Personal Finance Advisor with Behavior Modeling
+# Planwisely Technical Specification
 
-## A Supervised Learning Approach to Transaction Classification, Time-Series Expense Forecasting, and Interpretable Budget Recommendations
-
-**Version:** 1.0  
-**Date:** February 19, 2026  
-**Status:** Draft  
+**Version:** 2.0
+**Date:** 2026-09-13
+**Status:** Active Development — Not Launch Ready
 
 ---
 
-## Table of Contents
+## 1. Purpose
 
-1. [Executive Summary](#1-executive-summary)
-2. [Problem Statement](#2-problem-statement)
-3. [Goals & Success Criteria](#3-goals--success-criteria)
-4. [System Architecture](#4-system-architecture)
-5. [Data Specification](#5-data-specification)
-6. [Module 1 — Transaction Classification](#6-module-1--transaction-classification)
-7. [Module 2 — Time-Series Expense Forecasting](#7-module-2--time-series-expense-forecasting)
-8. [Module 3 — Interpretable Budget Recommendations](#8-module-3--interpretable-budget-recommendations)
-9. [Behavior Modeling Layer](#9-behavior-modeling-layer)
-10. [Training & Evaluation Pipeline](#10-training--evaluation-pipeline)
-11. [Serving & Inference](#11-serving--inference)
-12. [Ethical Considerations & Fairness](#12-ethical-considerations--fairness)
-13. [Project Structure](#13-project-structure)
-14. [Milestones & Timeline](#14-milestones--timeline)
-15. [Appendices](#15-appendices)
+Planwisely is a Pakistan-first B2C financial intelligence platform that helps salaried professionals (ages 22–40) answer:
+
+> "How much can I safely spend before payday?"
+
+This document is the **technical implementation source of truth**. It is written for developers, maintainers, AI coding agents, security reviewers, and future contributors.
 
 ---
 
-## 1. Executive Summary
+## 2. Product Definition
 
-This specification defines a **supervised-learning personal finance advisor** that ingests raw bank/card transaction data and delivers three core capabilities:
+Planwisely combines **specialized machine learning** with **deterministic financial logic** to produce authoritative financial intelligence.
 
-| Capability | Technique | Output |
+| Layer | Role |
+|---|---|
+| **Specialized ML** | Transaction classification, expense forecasting, behavioral feature extraction |
+| **Deterministic Financial Logic** | Budget optimization, scenario analysis, decision recommendations, financial profiling |
+| **Optional LLM (Future)** | Interface, explanation, orchestration — never the source of financial truth |
+
+The LLM is **not required** for the system to be "AI." Planwisely already uses specialized AI/ML. No external LLM provider is currently integrated.
+
+---
+
+## 3. Core Product Promise
+
+**"Know what you can safely spend before payday."**
+
+Safe-to-Spend is the central product direction. It is **not yet implemented** as a production calculation. It is a design target that requires backend support.
+
+---
+
+## 4. Technical Principles
+
+| Principle | Description |
+|---|---|
+| **Specialized ML + Deterministic Logic** | Financial truth comes from specialized models and deterministic systems, not from LLMs |
+| **Authorization Isolation** | Authenticated JWT `sub` is the authoritative user identity for all protected operations |
+| **Fail-Closed** | Missing or invalid credentials deny access by default |
+| **Determinism** | No randomness or wall-clock reads in financial calculations; identical inputs produce identical outputs |
+| **Honesty** | No fabricated income; missing information is represented as `None`, never guessed |
+| **Pakistan-First** | Initial market is Pakistan; architecture designed for eventual multi-currency/locale support |
+| **No Automated Financial Actions** | Recommendations only — the system never auto-executes transactions or account changes |
+
+
+---
+
+## 5. Current Implementation Status
+
+| Component | Status |
+|---|---|
+| Transaction Classification | Implemented — LightGBM; synthetic evaluation ~89.10% accuracy |
+| Feature Pipeline | Implemented — numerical, temporal, behavioral, text features |
+| Expense Forecasting | Implemented — global/demo/static artifact; ~6.10% MAPE |
+| Budget Optimization | Implemented — constraint-based with hard-protected categories |
+| Scenario / Decision Engines | Implemented — deterministic |
+| Financial Profile | Implemented — deterministic aggregation |
+| CSV Ingestion | Implemented — validation, row caps, file limits |
+| Authentication (Step 1) | COMMITTED LOCALLY (`1a5eb8a`) — NOT pushed |
+| Protected Routes (Step 2) | COMMITTED LOCALLY (`024465c`) — NOT pushed |
+| Ownership / Isolation (Step 3) | COMMITTED LOCALLY (`9b34da0`) — NOT pushed |
+| Safe-to-Spend | Planned — not implemented |
+| AI Copilot | Future — not implemented |
+| Financial Intelligence API | Future — not implemented |
+| Production Database | Not implemented — artifacts + cache only |
+
+---
+
+## 6. Repository / Deployment Overview
+
+```
+src/
+├── data/           Schemas, ingestion, synthetic-data generation
+├── evaluation/     Metrics, comparisons, fairness auditing
+├── features/       Numerical, temporal, behavioral, text features
+├── models/         ML models (classifier, forecaster, recommender)
+├── serving/        FastAPI app, middleware, routes, auth, cache
+├── services/       Financial logic (profile, scenario, decision)
+└── utils/          Constants, logging, privacy
+
+tests/unit/         Unit tests
+models/serving/     Demonstration model artifacts (read-only)
+frontend/           Browser-based interface
+infrastructure/     Docker, deployment configuration
+```
+
+### 6.1 Code-Referenced Section Numbering
+
+Module docstrings cite the legacy SPEC numbering (from the original February 2026 specification). Those citations remain canonical for navigating the code:
+
+| Code citation | Meaning | This document |
 |---|---|---|
-| **Transaction Classification** | Multi-class supervised learning (gradient-boosted trees + fine-tuned transformer embeddings) | Category label + confidence score per transaction |
-| **Expense Forecasting** | Time-series models (Prophet / N-BEATS / Temporal Fusion Transformer) | 30/60/90-day rolling expense forecasts per category |
-| **Budget Recommendations** | Constraint-based optimization with interpretable rule extraction (SHAP + anchors) | Per-category budget ceilings with natural-language explanations |
+| `SPEC §5.1` | Raw transaction schema | §16 |
+| `SPEC §5.2` / `§5.2.2` | Feature specification | §17–18 |
+| `SPEC §5.3` | Category taxonomy (6 L1 / 30 L2) | §16 |
+| `SPEC §8.2` | Budget optimisation constraints | §20 |
+| `SPEC §11.2.1`–`§11.2.3` | Serving endpoints (classify / forecast / budget) | §8 |
+| `SPEC §11.3` | Cache strategy and TTLs | §15, §25 |
+| `SPEC Appendix B` | MCC → category mappings | `src/utils/constants.py` |
 
-A cross-cutting **Behavior Modeling Layer** captures user spending patterns, detects regime changes (e.g., lifestyle inflation), and feeds behavioral features into all three modules.
-
----
-
-## 2. Problem Statement
-
-### 2.1 Context
-
-Consumer financial management tools today either (a) classify transactions with rigid rule-based systems that break on merchant-name variations, or (b) forecast spending with naïve averages that ignore seasonality and behavioral shifts. Users receive budgets that feel arbitrary and are therefore ignored.
-
-### 2.2 Gaps Addressed
-
-| Gap | How This System Addresses It |
-|---|---|
-| Brittle merchant-to-category mappings | Learned embeddings over merchant names, MCC codes, amounts, and temporal context |
-| Static forecasts | Multi-horizon probabilistic forecasts that adapt to regime changes |
-| Opaque recommendations | Every budget suggestion accompanied by feature-attribution explanations (SHAP values, anchor rules) |
-| No behavioral awareness | Explicit behavior model capturing habit formation, impulse-vs-planned spending, and income-cycle alignment |
 
 ---
 
-## 3. Goals & Success Criteria
+## 7. Serving Architecture
 
-### 3.1 Functional Goals
+The serving layer is a **FastAPI** application:
 
-| ID | Goal | Measurable Target |
+- **Application entry point:** `src/serving/app.py` — `create_app()` registers routers, middleware, and dependencies
+- **Route handlers:** `src/serving/routes/` (classify, forecast, budget, advise, ingest, live, health)
+- **Authentication:** `src/serving/auth.py`
+- **Middleware:** `src/serving/middleware.py`
+- **Caching:** `src/serving/cache.py`
+
+---
+
+## 8. API Surface
+
+### 8.1 Protected Endpoints (require Supabase JWT)
+
+| Method | Path | Description |
 |---|---|---|
-| G1 | Classify transactions into ≥ 30 spending categories | Macro-F1 ≥ 0.92 on held-out test set |
-| G2 | Forecast next-30-day total spend per category | MAPE ≤ 12% across top-10 categories by volume |
-| G3 | Produce per-category budget ceilings | ≥ 78% user acceptance rate (A/B test) |
-| G4 | Provide human-readable explanations for every recommendation | 100% of recommendations include ≥ 1 interpretable rule |
-| G5 | Detect behavioral regime changes within 7 days of onset | Precision ≥ 0.85, Recall ≥ 0.80 |
+| POST | `/v1/classify` | Classify a transaction |
+| GET | `/v1/forecast/{user_id}` | Expense forecast for an owner |
+| GET | `/v1/budget/{user_id}` | Budget recommendations for an owner |
+| POST | `/consumer/advise` | Deterministic financial advice |
+| POST | `/consumer/transactions/ingest-csv` | CSV ingestion with ownership checks |
+| POST | `/consumer/classify/live` | Live classification |
+| POST | `/consumer/forecast/live` | Live forecast |
+| POST | `/consumer/budget/live` | Live budget |
 
-### 3.2 Non-Functional Goals
+### 8.2 Public Endpoints (intentionally public)
 
-| ID | Goal | Target |
+| Method | Path | Notes |
 |---|---|---|
-| NF1 | Classification latency (p99) | ≤ 50 ms per transaction |
-| NF2 | Forecast generation latency | ≤ 5 s for full user profile |
-| NF3 | Model retraining cadence | Weekly (incremental); monthly (full) |
-| NF4 | Data privacy | All PII tokenized; no raw merchant names stored post-feature-extraction |
-| NF5 | Horizontal scalability | Handle ≥ 10 M users with linear cost scaling |
+| GET | `/health` | Health check |
+| GET | `/ready` | Model readiness |
+| GET | `/docs`, `/redoc`, `/openapi.json` | API documentation |
+| GET | `/favicon.ico` | Favicon |
+| POST | `/admin/generate-key` | **KNOWN SECURITY ISSUE — Step 4 scope** |
 
 ---
 
-## 4. System Architecture
+## 9. Authentication Architecture
 
-### 4.1 High-Level Diagram
+Planwisely uses **Supabase JWT** authentication. Tokens are verified against the Supabase JWKS endpoint using RS256.
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        DATA INGESTION LAYER                        │
-│  Bank Feeds (Plaid/Yodlee)  ·  CSV Upload  ·  Manual Entry API    │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     FEATURE ENGINEERING PIPELINE                   │
-│                                                                     │
-│  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────────┐  │
-│  │ Text Features│  │ Numerical Feats  │  │ Temporal Features    │  │
-│  │ (merchant    │  │ (amount, balance │  │ (day-of-week, pay-  │  │
-│  │  embeddings) │  │  velocity, etc.) │  │  cycle phase, etc.) │  │
-│  └──────┬───────┘  └────────┬─────────┘  └──────────┬───────────┘  │
-│         └──────────────┬────┴───────────────────────┘              │
-│                        ▼                                            │
-│              ┌──────────────────┐                                   │
-│              │ BEHAVIOR MODELING│                                   │
-│              │     LAYER        │                                   │
-│              └────────┬─────────┘                                   │
-└───────────────────────┼─────────────────────────────────────────────┘
-                        │
-          ┌─────────────┼─────────────┐
-          ▼             ▼             ▼
-   ┌─────────────┐ ┌──────────┐ ┌──────────────┐
-   │ MODULE 1    │ │ MODULE 2 │ │ MODULE 3     │
-   │ Transaction │ │ Expense  │ │ Budget       │
-   │ Classifier  │ │ Forecast │ │ Recommender  │
-   └──────┬──────┘ └────┬─────┘ └──────┬───────┘
-          │              │              │
-          └──────────────┼──────────────┘
-                         ▼
-              ┌─────────────────────┐
-              │   SERVING LAYER     │
-              │  REST API / gRPC    │
-              │  + Explanation UI   │
-              └─────────────────────┘
-```
-
-### 4.2 Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Language | Python 3.11+ |
-| ML Framework | PyTorch 2.x, scikit-learn, XGBoost, LightGBM |
-| Time-Series | Nixtla `neuralforecast` (N-BEATS, TFT), Prophet |
-| NLP Embeddings | Sentence-Transformers (`all-MiniLM-L6-v2`) |
-| Interpretability | SHAP, Alibi (Anchors), LIME |
-| Orchestration | Apache Airflow / Prefect |
-| Feature Store | Feast (offline: Parquet on S3; online: Redis) |
-| Model Registry | MLflow |
-| Serving | FastAPI + ONNX Runtime / TorchServe |
-| Monitoring | Evidently AI (data drift), Prometheus + Grafana |
-| Infrastructure | Kubernetes (EKS), Terraform |
-
----
-
-## 5. Data Specification
-
-### 5.1 Raw Transaction Schema
-
-```
-Transaction {
-    transaction_id   : str (UUID)
-    user_id          : str (UUID)
-    timestamp        : datetime (UTC)
-    amount           : float (signed; negative = debit)
-    currency         : str (ISO 4217)
-    merchant_name    : str
-    merchant_mcc     : int (4-digit Merchant Category Code)
-    account_type     : enum [CHECKING, SAVINGS, CREDIT, INVESTMENT]
-    channel          : enum [POS, ONLINE, ATM, TRANSFER, RECURRING]
-    location_city    : str | null
-    location_country : str (ISO 3166-1 alpha-2)
-    raw_description  : str
-    is_pending       : bool
-}
-```
-
-### 5.2 Derived Feature Groups
-
-#### 5.2.1 Text Features
-
-| Feature | Derivation | Dimension |
+| Component | File | Description |
 |---|---|---|
-| `merchant_embedding` | Sentence-Transformer encoding of `merchant_name + raw_description` | 384 |
-| `merchant_name_tokens` | Character-trigram TF-IDF (top 5 000 features, SVD-reduced) | 64 |
-| `mcc_embedding` | Learned embedding via category-label supervision | 16 |
+| `AuthPrincipal` | `src/serving/auth.py` | Verified JWT principal containing `sub` |
+| `require_auth` | `src/serving/auth.py` | FastAPI dependency that verifies the JWT |
+| `verify_token` | `src/serving/auth.py` | Token verification logic |
+| Auth middleware | `src/serving/middleware.py` | Middleware layer for auth |
 
-#### 5.2.2 Numerical Features
-
-| Feature | Derivation |
-|---|---|
-| `log_amount` | `log1p(abs(amount))` |
-| `amount_zscore_user` | Z-score of amount within user's historical distribution |
-| `amount_pct_of_income` | `abs(amount) / estimated_monthly_income` |
-| `balance_after` | Running balance post-transaction (when available) |
-| `rolling_spend_7d` | Sum of debits in trailing 7-day window |
-| `rolling_spend_30d` | Sum of debits in trailing 30-day window |
-| `txn_count_24h` | Number of transactions in preceding 24 hours |
-
-#### 5.2.3 Temporal Features
-
-| Feature | Derivation |
-|---|---|
-| `hour_of_day` | Cyclical encoding (sin/cos) |
-| `day_of_week` | Cyclical encoding (sin/cos) |
-| `day_of_month` | Cyclical encoding (sin/cos) |
-| `days_since_payday` | Distance to nearest detected income deposit |
-| `is_weekend` | Boolean |
-| `is_holiday` | Boolean (country-aware via `holidays` library) |
-| `month_phase` | Categorical: `early` (1–10), `mid` (11–20), `late` (21–end) |
-
-#### 5.2.4 Behavioral Features (from Behavior Modeling Layer — see §9)
-
-| Feature | Derivation |
-|---|---|
-| `spending_regime` | Current regime label (e.g., `normal`, `elevated`, `reduced`) |
-| `impulse_score` | Probability that this transaction is impulse-driven |
-| `habit_strength` | Recurrence strength of this merchant/category (0–1) |
-| `income_cycle_phase` | Normalized position within detected pay cycle (0.0–1.0) |
-| `lifestyle_drift_30d` | % change in median category spend vs. 90-day baseline |
-
-### 5.3 Label Schema (Transaction Categories)
-
-Hierarchical 2-level taxonomy (6 L1 + 30 L2):
+### 9.1 Authentication Flow
 
 ```
-HOUSING
-  ├── Rent/Mortgage
-  ├── Utilities
-  ├── Home Insurance
-  └── Maintenance & Repairs
-
-FOOD & DINING
-  ├── Groceries
-  ├── Restaurants
-  ├── Coffee Shops
-  ├── Food Delivery
-  └── Alcohol & Bars
-
-TRANSPORTATION
-  ├── Fuel
-  ├── Public Transit
-  ├── Ride-Share
-  ├── Parking & Tolls
-  └── Vehicle Maintenance
-
-SHOPPING & ENTERTAINMENT
-  ├── Clothing & Accessories
-  ├── Electronics
-  ├── Subscriptions & Streaming
-  ├── Hobbies & Sports
-  ├── Books & Media
-  └── Gifts & Donations
-
-HEALTH & PERSONAL
-  ├── Healthcare & Pharmacy
-  ├── Fitness & Gym
-  ├── Personal Care
-  └── Pet Care
-
-FINANCIAL
-  ├── Savings & Investments
-  ├── Loan Payments
-  ├── Insurance Premiums
-  ├── Fees & Charges
-  ├── Taxes
-  └── Income (credit-side)
+Client
+  → Supabase Auth (login/signup)
+  → JWT (RS256 signed)
+  → FastAPI require_auth dependency
+  → verify_token (JWKS verification)
+  → AuthPrincipal(sub=...)
+  → Route handler
 ```
 
-### 5.4 Data Volume Assumptions
+### 9.2 Fail-Closed Behavior
 
-| Entity | Estimated Scale |
+- Missing token → 401
+- Invalid or expired token → 401
+- `SUPABASE_URL` not configured → 401 (no startup crash)
+- Empty `API_KEYS` → 401 (no consumer bypass)
+
+---
+
+## 10. Authorization / Ownership Model
+
+### 10.1 Fundamental Invariant
+
+```
+authenticated AuthPrincipal.sub == financial resource owner
+```
+
+A client-provided `user_id` must **NEVER** establish ownership.
+
+### 10.2 Authoritative Identity
+
+The verified JWT subject (`principal.sub`) is the **only** authoritative user identity for protected financial operations. Ownership is **never** derived from:
+
+- Request body `user_id`
+- Email
+- Browser/localStorage identity
+- Arbitrary caller-provided identifiers
+- Cache keys controlled by the caller
+
+---
+
+## 11. Identity Propagation
+
+`principal.sub` is propagated through:
+
+1. **Router-level dependency:** `dependencies=[Depends(require_auth)]`
+2. **Handler parameter:** `principal: AuthPrincipal = Depends(require_auth)`
+3. **Internal processing:** all financial operations use `principal.sub`
+4. **Cache keys:** user-scoped cache keys include `principal.sub`
+5. **Response fields:** response `user_id` fields use `principal.sub`
+
+---
+
+## 12. Path `user_id` Policy
+
+For protected routes containing `{user_id}`:
+
+```
+requested user_id == authenticated principal.sub
+```
+
+| Endpoint | Policy |
 |---|---|
-| Users | 10 M |
-| Transactions / user / month | ~80 |
-| Training corpus (historical) | 2 years × 10 M users × 80 txns/mo ≈ 19.2 B rows |
-| Feature vector width (dense) | ~500 dimensions |
+| `GET /v1/forecast/{user_id}` | must equal `principal.sub` → 403 on mismatch |
+| `GET /v1/budget/{user_id}` | must equal `principal.sub` → 403 on mismatch |
 
-### 5.5 Data Splits
+---
 
-| Split | Allocation | Strategy |
+## 13. Body `user_id` Policy
+
+| Endpoint | Field | Policy |
 |---|---|---|
-| Train | 70% | Temporal split: all data before T − 90 days |
-| Validation | 15% | T − 90 days to T − 30 days |
-| Test | 15% | Most recent 30 days |
-| Out-of-time hold-out | Separate | Next calendar month (post-deployment baseline) |
+| `POST /v1/classify` | `transaction.user_id` | must match `principal.sub` |
+| `POST /consumer/advise` | `transactions[*].user_id` | each must match `principal.sub` |
+| `POST /consumer/advise` | top-level `user_id` (if supplied) | must match `principal.sub` |
 
-> **Note:** Splits are **per-user temporal** to prevent label leakage from future transactions.
+Matching subject → accepted. Mismatched subject → 403 Forbidden. Internal processing always uses `principal.sub`.
 
 ---
 
-## 6. Module 1 — Transaction Classification
+## 14. CSV Ownership Policy
 
-### 6.1 Objective
+For `POST /consumer/transactions/ingest-csv`:
 
-Assign each incoming transaction a **category label** (L2) with a calibrated confidence score. Support user corrections as online feedback for model refinement.
+- Every parsed transaction `user_id` must match `principal.sub`
+- Any row claiming a different owner → 403 before any processing
+- All existing CSV validation, row caps, file limits, and classification behavior preserved
 
-### 6.2 Model Architecture
+---
 
-```
-                  ┌───────────────────┐
-                  │  Raw Transaction  │
-                  └────────┬──────────┘
-                           │
-          ┌────────────────┼────────────────┐
-          ▼                ▼                ▼
-   ┌─────────────┐  ┌───────────┐  ┌──────────────┐
-   │  Text Tower │  │ Numerical │  │  Temporal +   │
-   │ (frozen     │  │  Features │  │  Behavioral   │
-   │  SentTrans  │  │   (batch  │  │   Features    │
-   │  + learned  │  │    norm)  │  │  (batch norm) │
-   │  projection)│  └─────┬─────┘  └──────┬────────┘
-   └──────┬──────┘        │               │
-          │               │               │
-          └───────────────┬───────────────┘
-                          ▼
-                 ┌─────────────────┐
-                 │  Concatenation  │
-                 │  + 2-layer MLP  │
-                 │  (512 → 256)    │
-                 └────────┬────────┘
-                          ▼
-                 ┌─────────────────┐
-                 │  Gradient-Boost │
-                 │  Meta-Learner   │
-                 │  (LightGBM on   │
-                 │   MLP logits +  │
-                 │   raw features) │
-                 └────────┬────────┘
-                          ▼
-                 ┌─────────────────┐
-                 │  Softmax Output │
-                 │  (30 classes)   │
-                 └─────────────────┘
-```
+## 15. Cache Isolation
 
-**Rationale for stacked architecture:**
-- The **text tower** captures semantic similarity among merchant names regardless of spelling variation.
-- The **MLP** learns cross-feature interactions between embeddings, amounts, and temporal signals.
-- The **LightGBM meta-learner** acts as a calibration/correction layer that captures residual patterns (especially long-tail merchants) and provides well-calibrated probabilities out-of-the-box.
-
-### 6.3 Training Procedure
-
-| Aspect | Detail |
+| Resource | Cache Key Pattern |
 |---|---|
-| Loss | Focal loss (γ = 2.0) to handle class imbalance |
-| Optimizer (MLP) | AdamW, lr = 3e-4, cosine schedule, 20 epochs |
-| Meta-learner | LightGBM with 5-fold CV on MLP outputs (out-of-fold predictions) |
-| Class weighting | Inverse-frequency weighting with cap at 10× |
-| Data augmentation | Merchant name typo injection (random char swap/drop, 10% of samples) |
-| User correction feedback | Treat as high-confidence labels (weight = 3× in loss); retrain weekly |
+| Forecasts | `("forecasts", principal.sub, horizon, categories)` |
+| Budgets | `("budgets", principal.sub)` |
+| Features | `("features", principal.sub, ...)` |
+| Explanations | `("explanations", ...)` |
 
-### 6.4 Evaluation Metrics
+**TTLs:** Features 6h, Forecasts 24h, Budgets 7d, Explanations 30d.
 
-| Metric | Target | Rationale |
+**Isolation guarantee:** the ownership gate (403) runs **before** any cache read, so User A cannot retrieve User B's cache entry by manipulating a body/path `user_id`.
+
+---
+
+## 16. Transaction Semantics
+
+Canonical model (`src/data/models.py` — `Transaction`): `transaction_id`, `user_id`, `timestamp` (UTC), `amount` (**signed** — negative debit, positive credit), `currency` (ISO 4217), `merchant_name`, `merchant_mcc` (ISO 18245), `account_type`, `channel` (POS/ONLINE/ATM/TRANSFER/RECURRING), location, `raw_description`, `is_pending`, optional `category_l1` / `category_l2`.
+
+Category taxonomy: 30 L2 categories across 6 L1 groups (`src/utils/constants.py`).
+
+---
+
+## 17. Classification Architecture
+
+- **Model:** LightGBM gradient-boosted trees; 30-class L2 category prediction
+- **Features:** 157 (numerical + temporal + behavioral + text)
+
+**Synthetic evaluation — NOT production customer metrics:**
+
+| Metric | Value |
+|---|---|
+| Accuracy | 89.10% |
+| Macro-F1 | 85.56% |
+| Weighted-F1 | 89.11% |
+| Top-3 Accuracy | 98.07% |
+| ECE | 7.81% |
+| Majority Baseline | 4.56% |
+
+Evaluation uses synthetic labels; do not present these as production accuracy.
+
+**Fairness auditing:** equal-opportunity difference and demographic-parity checks across income quintile, account age, and geographic region (`src/evaluation/fairness_audit.py`, `configs/fairness_config.yaml`).
+
+
+---
+
+## 18. FeatureService
+
+- **Feature parity:** 157/157 verified between training and serving
+- **Max absolute difference:** 0.0
+- Temporal-leakage-safe transforms (prior-history-only z-scores, rolling windows)
+- Implementation basis: `src/features/numerical_features.py`
+- **Temporal features:** `hour_of_day`, `day_of_week`, `day_of_month`, `days_since_payday`, `is_weekend`, `is_holiday`, `month_phase` (cyclical encodings)
+- **Behavioral features:** `spending_regime`, `impulse_score`, `habit_strength`, `income_cycle_phase`, `lifestyle_drift_30d`
+- **Parity evidence:** `tests/unit/test_train_serve_parity.py` routes serving through `FeatureService` to prove train/serve parity
+
+
+---
+
+## 19. Forecast Architecture
+
+Prophet-based monthly expense forecast by category, served from a pre-computed artifact.
+
+**FORECAST LIMITATION (must be preserved):** the forecast artifact is **global/demo/static**. It is **NOT genuinely personalized per user**. Step 3 provides authorization isolation only:
+
+```
+authenticated user → authorized request → global/static artifact
+→ response scoped to the requesting identity
+```
+
+This is **authorization isolation, NOT model personalization.** Artifact MAPE ≈ 6.10% on synthetic/demo data — not customer production accuracy.
+
+---
+
+## 20. Budget Architecture
+
+- **Solver:** constraint-based `BudgetOptimiser` (`scipy.optimize.linprog`, HiGHS) with heuristic fallback
+- **Objective:** minimize weighted deviation from baselines subject to income minus savings target
+
+**Hard-protected categories (never reduced):** Rent/Mortgage, Utilities, Home Insurance, Insurance Premiums, Loan Payments, Taxes (`HARD_PROTECTED_CATEGORIES`). `Uncategorized` is excluded from optimization.
+
+**Budget acceptance:** ~78.86% on synthetic evaluation. Do not market an older 80.9% figure as verified.
+
+**Explanations:** each recommendation includes SHAP feature attributions, an anchor rule, and a counterfactual via the ExplanationEngine (`src/models/recommender/explanations.py`).
+
+
+---
+
+## 21. Scenario Engine
+
+`src/services/scenario_engine.py` — deterministic. `FinancialProfile + ScenarioParams → ScenarioResult` with statuses `feasible` / `partial` / `infeasible`. Delegates required cuts to `BudgetOptimiser`; screens cuts through the behavioral feasibility checker when history is supplied. No randomness; no wall-clock reads; sorted dict iteration where order affects arithmetic.
+
+---
+
+## 22. Decision Engine
+
+`src/services/decision_engine.py` — deterministic orchestration:
+
+```
+Transactions → FinancialProfile → ScenarioResult → DecisionResult
+```
+
+Performs **no financial arithmetic of its own** — every number in `DecisionResult` is read from `FinancialProfile` / `ScenarioResult`. Safety invariants (transfer/refund semantics, confidence gating, Uncategorized protection, income never invented) are inherited from the underlying services.
+
+---
+
+## 23. Financial Profile
+
+`src/services/financial_profile.py` — deterministic aggregation of classified transactions. Honesty rules: income ONLY from `CategoryL2.INCOME`; refunds/reversals/transfers/savings movements never inflate income or expenses (reported informationally); income is never derived from spending; missing information is `None`. Monthly normalisation divides by distinct calendar months covered.
+
+---
+
+## 24. CSV Ingestion
+
+`src/serving/routes/ingest.py` — validates file size, row count, schema, and encoding; row caps enforced. Step 3 adds per-row ownership: each parsed `txn.user_id` must equal `principal.sub` → 403 before any classification or storage.
+
+---
+
+## 25. Caching
+
+`src/serving/cache.py` — `CacheClient`: Redis primary, in-memory dict fallback. Identity-namespaced per §15. TTLs per SPEC §11.3 (features 6h, forecasts 24h, budgets 7d, explanations 30d).
+
+---
+
+## 26. Error Handling
+
+HTTP 400/401/403/404/500. **Known risk:** error detail leakage via `detail=str(exc)` in some endpoints — not yet sanitized (planned hardening work).
+
+---
+
+## 27. Rate Limiting
+
+**Not implemented.** Per-identity rate limiting and abuse protections are planned hardening work.
+
+---
+
+## 28. Admin / Security Surface
+
+`/admin/generate-key` is publicly accessible — **KNOWN SECURITY ISSUE**. Admin lockdown is Step 4 scope; intentionally left unchanged in Step 3.
+
+---
+
+## 29. Frontend Integration Requirements
+
+- Obtain JWT from Supabase Auth; send `Authorization: Bearer <token>`
+- Client-side `user_id` is **untrusted** — the backend derives identity from the JWT
+- The frontend is **never** an authorization boundary
+- Render API data safely; do not render raw backend errors
+- Clear sensitive client caches on logout/account change
+
+---
+
+## 30. Supabase Integration
+
+- **Auth:** Supabase Auth for user management and JWT issuance
+- **Verification:** RS256 via Supabase JWKS
+- **Configuration:** `SUPABASE_URL` environment variable (missing → fail-closed 401, no startup crash)
+
+---
+
+## 31. Future Safe-to-Spend Architecture
+
+Safe-to-Spend answers: "How much can I safely spend before payday?" Conceptual inputs: current financial position, upcoming obligations, budget constraints, forecast, savings goals, transaction behavior.
+
+**Status: PLANNED — not implemented.** The frontend must not calculate it independently; backend logic is required.
+
+---
+
+## 32. Future AI Copilot
+
+- Calls **authorized Planwisely tools**; never invents financial answers
+- Provider-agnostic (OpenAI, Anthropic, Gemini, or future providers)
+- Fine-tuning is NOT an MVP requirement; only when proprietary data and benchmarks justify it
+- Training a general-purpose LLM from scratch is NOT part of the roadmap
+- **Status: FUTURE — not implemented.** No LLM is currently integrated.
+
+---
+
+## 33. Provider-Agnostic AI Architecture
+
+No external LLM provider is currently integrated. Future integration must remain provider-agnostic, with financial calculations remaining in specialized models / deterministic systems and the LLM confined to interface/explanation/orchestration.
+
+---
+
+## 34. Future Financial Intelligence API
+
+Planwisely may become a specialized **Financial Intelligence Layer/API** that other applications and AI agents call. **Status: FUTURE — not implemented.**
+
+---
+
+## 35. Agent Interoperability
+
+External AI agents may eventually call Planwisely's Financial Intelligence API using scoped authentication/authorization. **Status: FUTURE — not implemented.**
+
+---
+
+## 36. Privacy / Data Handling
+
+Privacy policy, terms of service, support/contact, and account/data deletion flows are **not yet implemented** — documented as launch-blocking gaps.
+
+---
+
+## 37. Testing
+
+| Suite | Result |
+|---|---|
+| `tests/unit/test_ownership.py` | 22 passed |
+| `tests/unit/test_auth.py` | 20 passed |
+| `tests/unit/test_auth_routes.py` | 21 passed |
+| `tests/unit/test_classify_endpoint.py` | 7 passed |
+| `tests/unit/test_csv_ingest_endpoint.py` | 10 passed |
+| `tests/unit/test_advise_endpoint.py` | 12 passed |
+| **Full unit suite** | **224 passed, 1 skipped** (2 warnings, ~413 s) |
+| `compileall src/serving tests/unit` | exit 0 |
+
+Results reflect the verified Step 3 implementation (commit `9b34da0`).
+
+---
+
+## 38. Current Auth Implementation Status
+
+| Step | State | Commit |
 |---|---|---|
-| **Macro-F1** | ≥ 0.92 | Primary metric; ensures balanced performance across all categories |
-| Top-3 Accuracy | ≥ 0.98 | Fallback UX: show top-3 suggestions if confidence < threshold |
-| ECE (Expected Calibration Error) | ≤ 0.03 | Confidence scores must be reliable for downstream modules |
-| Per-class Recall (min) | ≥ 0.80 | No category should be systematically missed |
-| Latency (p99) | ≤ 50 ms | Real-time classification on transaction arrival |
+| Step 1 — Supabase JWT foundation | COMMITTED LOCALLY, NOT pushed | `1a5eb8a13d6235d1f8e11d7dfd73767e67894702` |
+| Step 2 — protected financial routes | COMMITTED LOCALLY, NOT pushed | `024465c` |
+| Step 3 — ownership / isolation | COMMITTED LOCALLY, NOT pushed | `9b34da0` |
 
-### 6.5 Handling Edge Cases
-
-| Scenario | Strategy |
-|---|---|
-| Unknown / new merchant | Fall back to MCC code + amount heuristics; flag for human review if confidence < 0.5 |
-| Multi-category transactions (e.g., Walmart) | Use amount + time-of-day heuristics; if ambiguous, assign most frequent category for that user at that merchant |
-| International transactions | Currency-normalized amount features + country-aware MCC mapping |
-| Recurring vs. one-time | Channel feature (`RECURRING` flag) + recurrence detection from behavior model |
+All three auth steps are committed locally; none are pushed.
 
 ---
 
-## 7. Module 2 — Time-Series Expense Forecasting
+## 39. Open Launch Blockers
 
-### 7.1 Objective
-
-Produce **probabilistic multi-horizon forecasts** of per-category spending for each user at 30-, 60-, and 90-day horizons.
-
-### 7.2 Forecasting Targets
-
-| Target Series | Granularity | Aggregation |
-|---|---|---|
-| Total monthly spend | Weekly | Sum of all debits |
-| Per-category spend (top-10 L2 categories per user) | Weekly | Sum per category |
-| Discretionary vs. non-discretionary | Weekly | Sum per group |
-
-### 7.3 Model Selection
-
-A **model tournament** approach: train multiple models, select per-user based on validation performance.
-
-| Model | Strengths | When Selected |
-|---|---|---|
-| **Prophet** | Strong seasonality decomposition, robust to missing data | Users with < 6 months history; stable spending patterns |
-| **N-BEATS** | High accuracy on univariate series, no feature engineering needed | Users with 6–18 months history; moderate variability |
-| **Temporal Fusion Transformer (TFT)** | Handles covariates (income, behavioral features), multi-horizon, built-in attention for interpretability | Users with > 18 months history; complex patterns |
-
-### 7.4 Covariate Inputs (for TFT)
-
-| Covariate | Type | Description |
-|---|---|---|
-| `income_amount` | Known future | Predicted next income deposit(s) |
-| `is_holiday_week` | Known future | Binary flag per week |
-| `spending_regime` | Observed past | From behavior model |
-| `category_trend_3m` | Observed past | Linear trend coefficient over trailing 3 months |
-| `inflation_index` | Known future | CPI-based category-level price index |
-
-### 7.5 Training & Validation
-
-| Aspect | Detail |
+| Issue | Status |
 |---|---|
-| Window | Expanding window: train on all history up to T, validate on T to T+30d |
-| Retraining | Weekly incremental update; full retrain monthly |
-| Backtest | 6-fold temporal cross-validation (each fold shifts 30 days forward) |
-| Probabilistic output | 10th, 50th, 90th percentile forecasts (quantile regression for TFT/N-BEATS; uncertainty intervals for Prophet) |
+| `/admin/generate-key` public | Unfixed — Step 4 |
+| Plaintext API-key logging | Known concern |
+| Error leakage via `detail=str(exc)` | Known risk |
+| Rate limiting / abuse controls | Not implemented |
+| Privacy policy / terms / support | Not implemented |
+| Account & data deletion | Not implemented |
+| Security headers / Trusted Host | Not implemented |
+| Frontend security (XSS, storage) | Known risks |
+| Cache/Redis operational hardening | Known risks |
+| Observability / monitoring | Not implemented |
+| Model artifact loading (pickle can execute code on load) | Load only from trusted sources |
 
-### 7.6 Evaluation Metrics
-
-| Metric | Target | Scope |
-|---|---|---|
-| **MAPE** (median prediction) | ≤ 12% | Top-10 categories, 30-day horizon |
-| MAPE (60-day) | ≤ 18% | Top-10 categories |
-| MAPE (90-day) | ≤ 25% | Top-10 categories |
-| **CRPS** (Continuous Ranked Probability Score) | Minimize | Evaluates full predictive distribution quality |
-| **Coverage** (90% PI) | 85–95% | Prediction intervals should be neither too wide nor too narrow |
-| WAPE (Weighted Absolute Percentage Error) | ≤ 10% | Total spend across all categories |
-
-### 7.7 Regime-Aware Forecasting
-
-The behavior model (§9) feeds a **regime indicator** into the forecaster:
-
-1. When a regime change is detected (e.g., user starts spending significantly more on dining), the model:
-   - Increases the learning rate for recent observations (exponential weighting).
-   - Widens prediction intervals for 2 forecast cycles to reflect increased uncertainty.
-2. Forecasts include a **regime annotation**: `"Forecast adjusted: elevated dining spend detected since Jan 15"`.
 
 ---
 
-## 8. Module 3 — Interpretable Budget Recommendations
+## 40. Protected Areas / Invariants
 
-### 8.1 Objective
-
-Generate **actionable, personalized budget ceilings** per spending category, each accompanied by a natural-language explanation grounded in the user's own data.
-
-### 8.2 Recommendation Pipeline
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│   STEP 1: Baseline Budget from Forecast                        │
-│   budget_baseline[c] = forecast_p50[c] (30-day)                │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│   STEP 2: Savings Goal Integration                             │
-│   If user has savings target S:                                │
-│     gap = current_income - sum(budget_baseline) - S            │
-│     If gap < 0: distribute |gap| as cuts across discretionary  │
-│     categories, weighted by elasticity scores                  │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│   STEP 3: Behavioral Feasibility Check                         │
-│   For each category c:                                         │
-│     max_reduction[c] = f(habit_strength[c],                    │
-│                          historical_variance[c],               │
-│                          user_compliance_history[c])            │
-│     budget[c] = max(budget_baseline[c] - cut[c],              │
-│                     budget_baseline[c] * (1 - max_reduction))  │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│   STEP 4: Constraint Optimization                              │
-│   Solve:                                                       │
-│     minimize  Σ_c w_c · |budget[c] - user_preference[c]|      │
-│     subject to:                                                │
-│       Σ_c budget[c] ≤ income - savings_target                 │
-│       budget[c] ≥ floor[c]  (essential minimums)              │
-│       budget[c] ≤ ceiling[c] (behavioral max reduction)       │
-│   Solver: scipy.optimize.linprog (or cvxpy for QP variant)    │
-└──────────────────────────┬───────────────────────────────────────┘
-                           │
-                           ▼
-┌──────────────────────────────────────────────────────────────────┐
-│   STEP 5: Explanation Generation                               │
-│   For each adjusted category:                                  │
-│     - SHAP waterfall: which features drove this budget level   │
-│     - Anchor rule: "IF dining_frequency > 12/month AND         │
-│       avg_meal > $28 THEN reduce dining budget by 15%"         │
-│     - Peer comparison: "You spend 23% more on dining than      │
-│       users with similar income"                               │
-│     - Trend narrative: "Your grocery spending has increased    │
-│       8% over the last 3 months"                               │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### 8.3 Interpretability Methods
-
-| Method | Purpose | Library |
-|---|---|---|
-| **SHAP (TreeExplainer)** | Global + local feature importance for the budget optimization model | `shap` |
-| **Anchor Rules** | IF-THEN rules that "anchor" a prediction with high precision | `alibi` |
-| **Counterfactual Explanations** | "If you reduced coffee-shop visits from 18 to 10/month, you'd save ~$64" | Custom (nearest-neighbor in feature space) |
-| **Peer Benchmarking** | Contextual comparison against cohort (income band × region × household size) | Percentile computation on anonymized aggregate data |
-
-### 8.4 Explanation Templates
-
-```python
-TEMPLATES = {
-    "over_budget_habit": (
-        "You've spent ${amount} on {category} this month, which is "
-        "${over_amount} over your budget. This appears to be a recurring "
-        "pattern — you've exceeded this budget in {n_months} of the last "
-        "6 months. Consider {suggestion}."
-    ),
-    "savings_opportunity": (
-        "Reducing {category} by {pct}% (about ${save_amount}/month) "
-        "would help you reach your {goal_name} goal {time_saved} sooner. "
-        "Your spending on {category} is in the {percentile}th percentile "
-        "compared to similar users."
-    ),
-    "regime_change_alert": (
-        "Your {category} spending has {direction} by {change_pct}% since "
-        "{change_date}. At this rate, you'll spend an estimated "
-        "${projected} this month — ${delta} {over_under} your budget."
-    ),
-    "positive_reinforcement": (
-        "Great job! You've stayed within your {category} budget for "
-        "{streak} consecutive months, saving a total of ${total_saved}."
-    ),
-}
-```
-
-### 8.5 User Feedback Loop
-
-| Signal | Usage |
-|---|---|
-| Budget accepted (no edit) | Positive label: model was well-calibrated |
-| Budget manually adjusted | Implicit preference signal → update user preference vector |
-| Budget ignored (overspent without acknowledgment) | Indicates budget was unrealistic → increase `floor[c]` for that user/category |
-| Explicit "too aggressive" / "too lenient" | Direct preference → adjust elasticity score ± 0.1 |
-
-### 8.6 Evaluation
-
-| Metric | Target | Measurement |
-|---|---|---|
-| **Acceptance Rate** | ≥ 78% | % of recommended budgets kept without user modification |
-| Budget Adherence | ≥ 65% | % of months where user stays within recommended budget |
-| Explanation Helpfulness (survey) | ≥ 4.0 / 5.0 | Post-recommendation micro-survey |
-| Savings Goal Achievement | ≥ 40% of users with goals hit them within 12 months | Longitudinal tracking |
+Do not casually modify: FeatureService, BudgetOptimiser, `HARD_PROTECTED_CATEGORIES`, DecisionEngine, ScenarioEngine, financial_profile logic, classification semantics, transaction semantics, auth code, ownership enforcement, cache implementation.
 
 ---
 
-## 9. Behavior Modeling Layer
+## 41. Step 3 Acceptance State
 
-### 9.1 Purpose
-
-Captures latent user spending behaviors that are not directly observable from individual transactions. Provides behavioral features consumed by all three modules.
-
-### 9.2 Components
-
-#### 9.2.1 Spending Regime Detection
-
-- **Method:** Online Bayesian changepoint detection (BOCPD) on per-category weekly spend.
-- **States:** `normal`, `elevated`, `reduced`, `irregular`
-- **Output:** Current regime label + posterior probability + estimated change date.
-- **Parameters:**
-  - Hazard function: constant `λ = 1/60` (expected regime duration ≈ 60 days)
-  - Observation model: Gaussian with conjugate Normal-Inverse-Gamma prior
-
-#### 9.2.2 Impulse Score
-
-Estimates the probability that a given transaction is impulsive (unplanned).
-
-| Signal | Weight | Rationale |
-|---|---|---|
-| Time since last same-merchant visit unusually short | 0.20 | Repeat visits in quick succession suggest impulse |
-| Transaction at unusual hour for user | 0.15 | Late-night purchases correlate with impulse spending |
-| Amount significantly above user's median for category | 0.20 | Unusual ticket size |
-| Occurs within 48h of income deposit | 0.15 | "Payday splurge" effect |
-| Category is discretionary | 0.15 | Essentials are rarely impulsive |
-| No prior transaction at this merchant | 0.15 | Novel merchant exploration |
-
-- **Model:** Logistic regression on the above features (interpretability is critical here).
-- **Training labels:** Derived from user self-reports + heuristic pseudo-labels (validated by labeling team).
-
-#### 9.2.3 Habit Strength Index
-
-Measures how ingrained a spending pattern is.
-
-$$H(c, u) = \alpha \cdot \text{Recurrence}(c,u) + \beta \cdot \text{Consistency}(c,u) + \gamma \cdot \text{Duration}(c,u)$$
-
-Where:
-- $\text{Recurrence}$ = frequency relative to expected (e.g., daily coffee = 1.0)
-- $\text{Consistency}$ = 1 − coefficient of variation of inter-purchase intervals
-- $\text{Duration}$ = months since first observed purchase in category, capped at 12
-- $\alpha = 0.4, \beta = 0.35, \gamma = 0.25$ (tunable per cohort)
-
-#### 9.2.4 Income Cycle Alignment
-
-- Detect income deposits via amount clustering + recurrence (semi-supervised: user confirms during onboarding).
-- Compute `days_since_payday / pay_period_length` → normalized cycle position $\in [0, 1]$.
-- Enables analysis of **pay-cycle spending curves** (front-loaded vs. even vs. end-loaded spenders).
-
-#### 9.2.5 Lifestyle Drift Detector
-
-- Compare rolling 30-day median spend per category against 90-day baseline.
-- Alert if drift exceeds ± 2σ of historical variation for ≥ 2 consecutive periods.
-- Feeds into forecaster (§7.7) and budget recommender (§8.2 Step 3).
-
-### 9.3 Behavioral Feature Store
-
-All behavioral features are computed asynchronously and materialized in the **feature store** (Feast):
-- **Offline store:** Parquet files on S3 (for training).
-- **Online store:** Redis (for real-time inference, TTL = 24h, refresh every 6h).
+Complete. **Committed locally — not pushed.** Acceptance criteria (path/body/CSV ownership, exact budget lookup, cache namespacing, live identity propagation, ownership tests) are verified by the test evidence in §37.
 
 ---
 
-## 10. Training & Evaluation Pipeline
+## 42. Next Security Steps
 
-### 10.1 Pipeline DAG
-
-```
-                    ┌────────────┐
-                    │  Raw Data  │
-                    │  Ingestion │
-                    └─────┬──────┘
-                          │
-                    ┌─────▼──────┐
-                    │  Data      │
-                    │  Validation│  ← Great Expectations
-                    └─────┬──────┘
-                          │
-                ┌─────────┼─────────┐
-                ▼         ▼         ▼
-          ┌──────────┐ ┌──────┐ ┌──────────┐
-          │ Feature  │ │Label │ │ Behavior │
-          │ Engineer │ │ QA   │ │ Model    │
-          └────┬─────┘ └──┬───┘ └────┬─────┘
-               │          │          │
-               └──────────┼──────────┘
-                          ▼
-               ┌─────────────────────┐
-               │   Model Training    │
-               │  (Classification,   │
-               │   Forecasting,      │
-               │   Budget Optimizer) │
-               └──────────┬──────────┘
-                          │
-               ┌──────────▼──────────┐
-               │    Evaluation &     │
-               │    Comparison       │
-               │  (vs. champion)     │
-               └──────────┬──────────┘
-                          │
-               ┌──────────▼──────────┐
-               │   Registry &        │
-               │   Promotion         │  ← MLflow
-               └──────────┬──────────┘
-                          │
-               ┌──────────▼──────────┐
-               │   Canary Rollout    │
-               │   (5% → 25% → 100%)│
-               └─────────────────────┘
-```
-
-### 10.2 Data Validation (Great Expectations)
-
-| Suite | Checks |
-|---|---|
-| Schema | Column presence, types, nullability |
-| Volume | Daily transaction count within ± 3σ of 30-day rolling mean |
-| Distribution | Amount distribution KL-divergence < 0.1 vs. reference |
-| Label | Category distribution chi-squared test p > 0.01 |
-| Freshness | Max timestamp within 2h of current time |
-
-### 10.3 Model Comparison Protocol
-
-For each candidate model:
-1. Evaluate on **test set** using primary metrics (§6.4, §7.6, §8.6).
-2. Compare against current **champion model** using paired bootstrap test (n=10 000, α=0.05).
-3. If candidate is statistically significantly better on primary metric **and** not significantly worse on any secondary metric → promote.
-4. Run **shadow mode** for 72h in production (log predictions, don't serve) before canary rollout.
-
-### 10.4 Experiment Tracking
-
-All experiments tracked in **MLflow** with:
-- Hyperparameters
-- Metrics (train, val, test)
-- Artifacts (model binary, SHAP summary plots, confusion matrices)
-- Data version hash (DVC)
-- Git commit SHA
+1. **Step 4:** admin endpoint lockdown
+2. Error sanitization
+3. Rate limiting / abuse controls
+4. Cache/Redis hardening
+5. Security headers / deployment hardening
+6. Observability & security logging
 
 ---
 
-## 11. Serving & Inference
+## 43. Launch Gate
 
-### 11.1 Inference Modes
-
-| Mode | Trigger | Latency Target | Model Format |
-|---|---|---|---|
-| **Real-time classification** | New transaction arrives | ≤ 50 ms (p99) | ONNX (MLP) + LightGBM binary |
-| **Batch forecasting** | Nightly job (02:00 UTC) | ≤ 5 s / user | PyTorch (TFT) / Prophet pickle |
-| **On-demand budget refresh** | User opens budget tab or monthly trigger | ≤ 2 s | Pre-computed forecast + optimizer |
-
-### 11.2 API Specification
-
-#### 11.2.1 Classify Transaction
-
-```
-POST /v1/classify
-Request:
-{
-  "transaction": { <Transaction object per §5.1> }
-}
-
-Response:
-{
-  "category_l1": "FOOD & DINING",
-  "category_l2": "Coffee Shops",
-  "confidence": 0.94,
-  "top_3": [
-    {"category": "Coffee Shops", "confidence": 0.94},
-    {"category": "Restaurants", "confidence": 0.04},
-    {"category": "Groceries", "confidence": 0.01}
-  ],
-  "is_impulse": false,
-  "impulse_score": 0.12
-}
-```
-
-#### 11.2.2 Get Forecast
-
-```
-GET /v1/forecast/{user_id}?horizon=30&categories=all
-
-Response:
-{
-  "user_id": "...",
-  "generated_at": "2026-02-19T14:00:00Z",
-  "horizon_days": 30,
-  "forecasts": [
-    {
-      "category": "Groceries",
-      "p10": 320.00,
-      "p50": 385.00,
-      "p90": 460.00,
-      "trend": "stable",
-      "regime": "normal"
-    },
-    ...
-  ],
-  "total_spend": {"p10": 2800, "p50": 3250, "p90": 3720}
-}
-```
-
-#### 11.2.3 Get Budget Recommendations
-
-```
-GET /v1/budget/{user_id}
-
-Response:
-{
-  "user_id": "...",
-  "period": "2026-03",
-  "income_estimate": 5500.00,
-  "savings_target": 550.00,
-  "recommendations": [
-    {
-      "category": "Restaurants",
-      "recommended_budget": 280.00,
-      "current_trend": 340.00,
-      "confidence": 0.87,
-      "explanation": "Reducing dining out by 18% (~$60/month) would help you reach your emergency fund goal 2 months sooner. Your dining spend is in the 72nd percentile for your income bracket.",
-      "shap_top_features": [
-        {"feature": "dining_frequency", "impact": +45.0},
-        {"feature": "avg_meal_cost", "impact": +32.0},
-        {"feature": "income_pct_dining", "impact": -12.0}
-      ],
-      "anchor_rule": "IF dining_visits > 14/month AND avg_ticket > $24 THEN suggest 15% reduction",
-      "counterfactual": "If you cooked at home 2 more nights/week, estimated monthly savings: $96"
-    },
-    ...
-  ]
-}
-```
-
-### 11.3 Caching Strategy
-
-| Data | Cache Layer | TTL | Invalidation |
-|---|---|---|---|
-| User feature vectors | Redis | 6h | On new transaction |
-| Forecasts | Redis | 24h | On nightly batch run |
-| Budget recommendations | PostgreSQL + Redis | 7d | On user preference change or forecast refresh |
-| SHAP explanations | PostgreSQL | 30d | On model version change |
-
-### 11.4 Scalability
-
-- **Classification service:** Stateless, horizontally scaled behind load balancer. Auto-scale on CPU utilization > 60%.
-- **Forecast service:** GPU-backed pods (for TFT inference), scaled on queue depth.
-- **Feature computation:** Spark on EMR for batch features; Flink for streaming features (transaction velocity, running balances).
-
----
-
-## 12. Ethical Considerations & Fairness
-
-### 12.1 Bias Mitigation
-
-| Risk | Mitigation |
-|---|---|
-| Income-level bias in recommendations (e.g., always suggesting cuts for lower-income users) | Budget recommendations normalize to income %; floors set per category to preserve dignity |
-| Gender/demographic bias in peer comparisons | Cohorts defined by income band + region only; no demographic segmentation |
-| Merchant-name bias (non-English merchants misclassified) | Multilingual sentence-transformer; explicit evaluation on non-English merchant subsets |
-| Model performance disparity across user segments | Fairness audit: stratified evaluation by income quintile, account age, geographic region |
-
-### 12.2 Fairness Metrics
-
-| Metric | Threshold |
-|---|---|
-| Equal Opportunity difference (classification recall) across income quintiles | ≤ 0.05 |
-| Demographic parity of "impulse" labeling across income bands | ≤ 0.08 |
-| Recommendation aggressiveness (mean % cut suggested) parity across cohorts | Within ± 10% relative |
-
-### 12.3 Privacy & Security
-
-| Requirement | Implementation |
-|---|---|
-| PII minimization | Merchant names hashed after embedding extraction; raw descriptions dropped post-feature-extraction |
-| Data encryption | AES-256 at rest; TLS 1.3 in transit |
-| Access control | Row-level security; ML engineers access only anonymized/aggregated data |
-| Right to deletion | Full user data purge pipeline (GDPR/CCPA compliant, ≤ 72h SLA) |
-| Model inversion protection | Differential privacy noise (ε = 8) added to published aggregate statistics |
-| Explainability audit trail | All explanations logged with model version, feature values, and timestamp |
-
-### 12.4 Responsible AI Guardrails
-
-- **No automated financial decisions:** The system provides *recommendations*, never auto-executes transactions or account changes.
-- **Confidence thresholds:** Recommendations with confidence < 0.6 include a disclaimer: *"This suggestion is based on limited data — please review carefully."*
-- **Human escalation:** Users can flag any recommendation for expert review. Flagged cases feed into a quality assurance queue.
-- **Tone guidelines:** Explanations never use shame-inducing language ("you wasted", "you overspent irresponsibly"). Always neutral or encouraging.
-
----
-
-## 13. Project Structure
-
-```
-ml-fin-advisor/
-├── README.md
-├── pyproject.toml                   # Project metadata & dependency management
-├── Makefile                         # Common dev commands
-│
-├── configs/
-│   ├── model_config.yaml            # Hyperparameters for all modules
-│   ├── feature_config.yaml          # Feature definitions & transformations
-│   ├── serving_config.yaml          # API & caching configuration
-│   └── fairness_config.yaml         # Fairness thresholds & audit settings
-│
-├── src/
-│   ├── data/
-│   │   ├── ingestion.py             # Bank feed connectors (Plaid, CSV, API)
-│   │   ├── validation.py            # Great Expectations suites
-│   │   ├── preprocessing.py         # Cleaning, normalization, deduplication
-│   │   └── splits.py                # Temporal train/val/test splitting
-│   │
-│   ├── features/
-│   │   ├── text_features.py         # Merchant embeddings, TF-IDF
-│   │   ├── numerical_features.py    # Amount transforms, rolling aggregates
-│   │   ├── temporal_features.py     # Cyclical encoding, holiday flags
-│   │   ├── behavioral_features.py   # Regime, impulse, habit, cycle features
-│   │   └── feature_store.py         # Feast integration (online + offline)
-│   │
-│   ├── models/
-│   │   ├── classifier/
-│   │   │   ├── text_tower.py        # Sentence-Transformer + projection
-│   │   │   ├── mlp.py               # Multi-modal fusion MLP
-│   │   │   ├── meta_learner.py      # LightGBM stacking layer
-│   │   │   └── train.py             # Classification training loop
-│   │   │
-│   │   ├── forecaster/
-│   │   │   ├── prophet_model.py     # Prophet wrapper
-│   │   │   ├── nbeats_model.py      # N-BEATS wrapper
-│   │   │   ├── tft_model.py         # Temporal Fusion Transformer
-│   │   │   ├── model_selector.py    # Per-user model tournament
-│   │   │   └── train.py             # Forecasting training loop
-│   │   │
-│   │   ├── recommender/
-│   │   │   ├── budget_optimizer.py   # Constraint optimization (scipy/cvxpy)
-│   │   │   ├── feasibility.py       # Behavioral feasibility checks
-│   │   │   ├── explanations.py      # SHAP, Anchors, counterfactuals
-│   │   │   └── templates.py         # Natural language templates
-│   │   │
-│   │   └── behavior/
-│   │       ├── regime_detector.py    # Bayesian changepoint detection
-│   │       ├── impulse_scorer.py     # Impulse probability model
-│   │       ├── habit_index.py        # Habit strength computation
-│   │       └── income_cycle.py       # Pay-cycle detection & alignment
-│   │
-│   ├── serving/
-│   │   ├── app.py                   # FastAPI application
-│   │   ├── routes/
-│   │   │   ├── classify.py          # POST /v1/classify
-│   │   │   ├── forecast.py          # GET /v1/forecast/{user_id}
-│   │   │   └── budget.py            # GET /v1/budget/{user_id}
-│   │   ├── middleware.py            # Auth, rate limiting, logging
-│   │   └── cache.py                 # Redis caching layer
-│   │
-│   ├── evaluation/
-│   │   ├── classification_metrics.py
-│   │   ├── forecast_metrics.py
-│   │   ├── recommendation_metrics.py
-│   │   ├── fairness_audit.py        # Stratified fairness evaluation
-│   │   └── model_comparison.py      # Champion/challenger testing
-│   │
-│   └── utils/
-│       ├── logging.py
-│       ├── privacy.py               # PII hashing, anonymization
-│       └── constants.py             # Category taxonomy, enums
-│
-├── pipelines/
-│   ├── training_pipeline.py         # Airflow/Prefect DAG for training
-│   ├── feature_pipeline.py          # Feature computation DAG
-│   └── inference_pipeline.py        # Batch inference DAG
-│
-├── notebooks/
-│   ├── 01_eda.ipynb                 # Exploratory data analysis
-│   ├── 02_feature_analysis.ipynb    # Feature importance & correlation
-│   ├── 03_model_experiments.ipynb   # Model prototyping
-│   └── 04_fairness_analysis.ipynb   # Fairness audit visualizations
-│
-├── tests/
-│   ├── unit/
-│   │   ├── test_features.py
-│   │   ├── test_classifier.py
-│   │   ├── test_forecaster.py
-│   │   ├── test_recommender.py
-│   │   └── test_behavior.py
-│   ├── integration/
-│   │   ├── test_pipeline.py
-│   │   └── test_serving.py
-│   └── fixtures/
-│       └── sample_transactions.json
-│
-├── infrastructure/
-│   ├── terraform/                   # IaC for AWS resources
-│   ├── k8s/                         # Kubernetes manifests
-│   └── docker/
-│       ├── Dockerfile.train         # Training image
-│       └── Dockerfile.serve         # Serving image
-│
-└── docs/
-    ├── architecture.md
-    ├── data_dictionary.md
-    └── runbook.md
-```
-
----
-
-## 14. Milestones & Timeline
-
-| Phase | Duration | Key Deliverables |
-|---|---|---|
-| **Phase 0: Foundation** | Weeks 1–3 | Data pipeline, schema validation, feature store setup, dev environment |
-| **Phase 1: Classification** | Weeks 4–8 | Text tower, MLP, meta-learner; macro-F1 ≥ 0.90 on internal test set |
-| **Phase 2: Behavior Model** | Weeks 6–10 | Regime detection, impulse scorer, habit index (parallel with Phase 1) |
-| **Phase 3: Forecasting** | Weeks 9–14 | Prophet baseline → N-BEATS → TFT; model tournament; MAPE ≤ 12% |
-| **Phase 4: Recommendations** | Weeks 13–17 | Budget optimizer, explanation engine, template system |
-| **Phase 5: Integration & Serving** | Weeks 16–19 | API, caching, end-to-end latency targets met |
-| **Phase 6: Fairness & Hardening** | Weeks 18–21 | Fairness audit, privacy review, guardrails, load testing |
-| **Phase 7: Beta & Iteration** | Weeks 22–26 | Canary rollout (5% → 25%), A/B test budget acceptance rate, iterate |
-| **Phase 8: GA** | Week 27 | Full rollout, monitoring dashboards, runbook finalized |
-
----
-
-## 15. Appendices
-
-### Appendix A: Hyperparameter Defaults
-
-#### A.1 Transaction Classifier (MLP)
-
-| Parameter | Value |
-|---|---|
-| Hidden layers | [512, 256] |
-| Activation | GELU |
-| Dropout | 0.3 |
-| Batch size | 2048 |
-| Learning rate | 3e-4 |
-| Weight decay | 1e-4 |
-| Focal loss γ | 2.0 |
-| Label smoothing | 0.05 |
-
-#### A.2 Transaction Classifier (LightGBM Meta-Learner)
-
-| Parameter | Value |
-|---|---|
-| num_leaves | 127 |
-| max_depth | 8 |
-| learning_rate | 0.05 |
-| n_estimators | 500 |
-| min_child_samples | 50 |
-| subsample | 0.8 |
-| colsample_bytree | 0.8 |
-| reg_alpha | 0.1 |
-| reg_lambda | 1.0 |
-
-#### A.3 Temporal Fusion Transformer
-
-| Parameter | Value |
-|---|---|
-| Hidden size | 64 |
-| Attention heads | 4 |
-| LSTM layers | 2 |
-| Dropout | 0.1 |
-| Learning rate | 1e-3 |
-| Quantiles | [0.1, 0.5, 0.9] |
-| Max encoder length | 52 weeks |
-| Max prediction length | 13 weeks |
-
-#### A.4 N-BEATS
-
-| Parameter | Value |
-|---|---|
-| Stack types | [trend, seasonality, generic] |
-| Blocks per stack | 3 |
-| Hidden size | 256 |
-| Theta dims | [4, 8, 4] |
-| Lookback multiple | 5× horizon |
-
-### Appendix B: Category Mapping — MCC Code Reference
-
-| MCC Range | Mapped L1 Category |
-|---|---|
-| 5411–5499 | FOOD & DINING (Groceries) |
-| 5812–5814 | FOOD & DINING (Restaurants) |
-| 5541–5542 | TRANSPORTATION (Fuel) |
-| 4111–4131 | TRANSPORTATION (Public Transit) |
-| 5311–5399 | SHOPPING & ENTERTAINMENT |
-| 6010–6012 | FINANCIAL (ATM / Cash) |
-| 8011–8099 | HEALTH & PERSONAL |
-| ... | (Full mapping in `src/utils/constants.py`) |
-
-### Appendix C: Glossary
-
-| Term | Definition |
-|---|---|
-| **BOCPD** | Bayesian Online Changepoint Detection — a sequential algorithm for detecting abrupt changes in time-series generating processes |
-| **CRPS** | Continuous Ranked Probability Score — a proper scoring rule for evaluating probabilistic forecasts |
-| **ECE** | Expected Calibration Error — measures how well predicted probabilities match actual frequencies |
-| **Focal Loss** | A modified cross-entropy loss that down-weights easy examples, focusing training on hard/rare classes |
-| **MAPE** | Mean Absolute Percentage Error — average of absolute percentage errors across predictions |
-| **MCC** | Merchant Category Code — a 4-digit ISO 18245 code assigned by card networks to classify merchant type |
-| **SHAP** | SHapley Additive exPlanations — a game-theoretic approach to explain individual model predictions |
-| **TFT** | Temporal Fusion Transformer — an attention-based architecture for multi-horizon time-series forecasting with interpretable components |
-| **WAPE** | Weighted Absolute Percentage Error — sum of absolute errors divided by sum of actuals; robust to near-zero values |
-
----
-
-*End of Specification*
+Planwisely is **NOT LAUNCH READY.** Current status: **ACTIVE DEVELOPMENT.**
