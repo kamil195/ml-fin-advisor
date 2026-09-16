@@ -294,9 +294,10 @@ async def _classify(
             fraud_analysis=fraud_analysis,
         )
 
-    except Exception as exc:
-        logger.exception("Classification failed: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception:
+        # STEP 5: diagnostics stay server-side; clients get a generic message.
+        logger.exception("Classification failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Internal server error.") from None
 
 
 def _compute_shap(

@@ -16,6 +16,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.serving.cache import CacheClient, CACHE_TTLS
 from src.serving.middleware import RateLimitMiddleware
@@ -143,6 +144,19 @@ def create_app() -> FastAPI:
         elapsed_ms = (time.perf_counter() - start) * 1000
         response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.1f}"
         return response
+
+    # STEP 5: catch-all for unexpected internal exceptions. Deliberate
+    # HTTPException responses (400/401/403/404/413/415/422/503) are handled by
+    # FastAPI/Starlette first and are unaffected; this only converts unhandled
+    # exceptions into a generic, safe 500 while logging diagnostics server-side.
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception):
+        logger.exception(
+            "Unhandled internal error on %s %s", request.method, request.url.path
+        )
+        return JSONResponse(
+            status_code=500, content={"detail": "Internal server error."}
+        )
 
     # Register routers
     app.include_router(health_router, tags=["Health"])

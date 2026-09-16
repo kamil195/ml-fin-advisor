@@ -47,7 +47,8 @@ class CacheClient:
             client = redis.from_url(redis_url, decode_responses=True)
             client.ping()
             self._redis = client
-            logger.info("Connected to Redis at %s", redis_url)
+            # SECURITY: never log the connection URL — it may embed credentials.
+            logger.info("Connected to Redis cache")
         except (ImportError, Exception) as exc:
             self._redis = None
             logger.warning(

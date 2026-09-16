@@ -155,6 +155,7 @@ async def get_budget(
 
     except HTTPException:
         raise
-    except Exception as exc:
-        logger.exception("Budget generation failed: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception:
+        # STEP 5: diagnostics stay server-side; clients get a generic message.
+        logger.exception("Budget generation failed unexpectedly")
+        raise HTTPException(status_code=500, detail="Internal server error.") from None
