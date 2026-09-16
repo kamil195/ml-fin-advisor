@@ -2,100 +2,29 @@
 Middleware for the serving layer (SPEC §11).
 
 Provides:
-  - API-key authentication (via FastAPI dependency injection)
   - Rate limiting
   - Request/response logging
+
+SECURITY STEP 4: the legacy API-key machinery (``verify_api_key``,
+``API_KEYS``, ``/admin/generate-key`` and its public-path set) was removed
+entirely. Authentication is handled exclusively by the Supabase JWT
+dependency ``require_auth`` (src/serving/auth.py).
 """
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
-import secrets
 import time
 from collections import defaultdict
 
-from fastapi import HTTPException, Request, Security
-from fastapi.security import APIKeyHeader
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-# ── Paths that never require an API key ─────────────────────
-_PUBLIC_PATHS: set[str] = {
-    "/health",
-    "/ready",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
-    "/favicon.ico",
-    "/admin/generate-key",
-}
-
-# Public operational/documentation routes (and admin, in a later step).
-# Consumer financial routes are gated by the JWT auth dependency (require_auth),
-# not by this legacy API-key middleware.
-_PUBLIC_PREFIXES: tuple[str, ...] = ()
-
-# ── FastAPI security scheme ─────────────────────────────────
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-def _load_api_keys() -> set[str]:
-    """Load valid API keys from the ``API_KEYS`` env var.
-
-    Keys are stored as a comma-separated list.  Fail-closed: when the env var
-    is empty or unset no keys are configured, so API-key authentication cannot
-    succeed (verification of each request instead falls through to the JWT
-    route dependency or returns 401).
-    """
-    raw = os.environ.get("API_KEYS", "").strip()
-    if not raw:
-        return set()
-    return {k.strip() for k in raw.split(",") if k.strip()}
-
-
-def generate_api_key(prefix: str = "fina") -> str:
-    """Return a new random API key like ``fina_2f8a…`` (40 hex chars)."""
-    return f"{prefix}_{secrets.token_hex(20)}"
-
-
-async def verify_api_key(
-    request: Request,
-    api_key: str | None = Security(_api_key_header),
-) -> None:
-    """FastAPI dependency that enforces API-key authentication.
-
-    * Public paths (health, docs, admin/generate-key) are always open.
-    * If ``API_KEYS`` env var is empty/unset -> fail closed: raises HTTP 401.
-    * Otherwise the ``X-API-Key`` header must contain a valid key (HTTP 401
-      when missing or invalid).
-    """
-    # Public paths — always open
-    if request.url.path in _PUBLIC_PATHS:
-        return
-
-    valid_keys = _load_api_keys()
-
-    # Fail-closed: empty/unset API_KEYS is NOT open access.
-    if not valid_keys:
-        raise HTTPException(
-            status_code=401,
-            detail="Authentication required.",
-        )
-
-    if not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing API key. Include X-API-Key header.",
-        )
-
-    if api_key not in valid_keys:
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
-        logger.warning("Invalid API key attempt (hash=%s)", key_hash)
-        raise HTTPException(status_code=401, detail="Invalid API key.")
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

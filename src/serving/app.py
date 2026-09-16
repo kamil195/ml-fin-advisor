@@ -18,7 +18,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.serving.cache import CacheClient, CACHE_TTLS
-from src.serving.middleware import RateLimitMiddleware, generate_api_key
+from src.serving.middleware import RateLimitMiddleware
 from src.serving.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -170,14 +170,6 @@ def create_app() -> FastAPI:
         advise_router, tags=["Decision Engine"],
         dependencies=[Depends(require_auth)],
     )
-
-    # ── Admin: generate a new API key (prints to stdout) ────────
-    @app.get("/admin/generate-key", tags=["Admin"], include_in_schema=False)
-    async def admin_generate_key():
-        """Generate a random API key (for local/dev use only)."""
-        key = generate_api_key()
-        logger.info("Generated new API key: %s", key)
-        return {"api_key": key, "note": "Add this to the API_KEYS env var."}
 
     return app
 

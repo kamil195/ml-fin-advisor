@@ -26,7 +26,6 @@ from fastapi.testclient import TestClient
 
 from src.serving.app import create_app
 from src.serving.auth import AuthPrincipal, require_auth
-from src.serving.middleware import verify_api_key
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 
@@ -114,25 +113,9 @@ def _protected_probe_app() -> FastAPI:
     return app
 
 
-def _legacy_probe_app() -> FastAPI:
-    """Minimal app exposing one legacy verify_api_key-protected route."""
-    app = FastAPI()
-
-    @app.get("/legacy", dependencies=[Depends(verify_api_key)])
-    async def legacy():
-        return {"ok": True}
-
-    return app
-
-
 @pytest.fixture
 def probe_client(auth_env):
     return TestClient(_protected_probe_app())
-
-
-@pytest.fixture
-def legacy_client():
-    return TestClient(_legacy_probe_app())
 
 
 @pytest.fixture
@@ -202,19 +185,7 @@ def test_production_app_fails_closed_without_supabase_url(monkeypatch, make_auth
     assert r.status_code == 401
 
 
-def test_empty_api_keys_fails_closed_legacy(legacy_client, monkeypatch):
-    """Empty/unset API_KEYS must NOT mean open access on the legacy path."""
-    monkeypatch.delenv("API_KEYS", raising=False)
-    assert legacy_client.get("/legacy").status_code == 401
 
-
-def test_legacy_api_key_still_works_when_configured(legacy_client, monkeypatch):
-    """Fail-closed must not break the legacy mechanism when keys ARE provided."""
-    monkeypatch.setenv("API_KEYS", "test-key-abc123")
-    r1 = legacy_client.get("/legacy", headers={"X-API-Key": "test-key-abc123"})
-    assert r1.status_code == 200
-    r2 = legacy_client.get("/legacy", headers={"X-API-Key": "wrong-key"})
-    assert r2.status_code == 401
 
 # ══ 3. production route wiring ═══════════════════════════════════════════════
 
@@ -318,10 +289,18 @@ def test_ready_remains_public(bare_client):
     assert "components" in r.json()
 
 
-def test_admin_generate_key_remains_public(bare_client):
-    """Unchanged in this step (admin hardening is a separate future task)."""
+def test_admin_generate_key_removed(bare_client):
+    """STEP 4: the legacy unauthenticated admin key-generation route is gone."""
     r = bare_client.get("/admin/generate-key")
-    assert r.status_code == 200
+    assert r.status_code in (404, 405)
+
+
+def test_x_api_key_cannot_authenticate_financial_route(bare_client):
+    """STEP 4: legacy API-key authentication is removed entirely. A JWT-free
+    financial request carrying X-API-Key must still be rejected with 401 —
+    Supabase JWT remains the sole authentication authority."""
+    r = bare_client.get("/v1/budget/user-123", headers={"X-API-Key": "any-key-value"})
+    assert r.status_code == 401
 
 
 def test_docs_and_openapi_remain_public(bare_client):
