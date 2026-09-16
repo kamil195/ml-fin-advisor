@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.serving.cache import CacheClient, CACHE_TTLS
-from src.serving.middleware import RateLimitMiddleware
+from src.serving.rate_limit import SlidingWindowLimiter, enforce_rate_limit
 from src.serving.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -132,9 +132,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    from src.serving.middleware import RateLimitMiddleware
-
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=600, burst=50)
+    # SECURITY STEP 6: identity-aware rate limiting for authenticated
+    # financial routes (single-worker in-memory sliding window — see
+    # src/serving/rate_limit.py). Limits are environment-configurable.
+    limiter = SlidingWindowLimiter.from_env()
+    app.state.rate_limiter = limiter
+    if limiter.config.enabled:
+        logger.info(
+            "Rate limiting enabled: %s requests / %ss per authenticated user",
+            limiter.config.requests,
+            limiter.config.window_seconds,
+        )
+    else:
+        logger.info("Rate limiting disabled by configuration")
 
     # Request timing middleware
     @app.middleware("http")
@@ -162,27 +172,27 @@ def create_app() -> FastAPI:
     app.include_router(health_router, tags=["Health"])
     app.include_router(
         classify_router, prefix="/v1", tags=["Classification"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
     app.include_router(
         forecast_router, prefix="/v1", tags=["Forecasting"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
     app.include_router(
         budget_router, prefix="/v1", tags=["Budget"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
     app.include_router(
         live_router, tags=["Live Forecast & Budget"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
     app.include_router(
         ingest_router, tags=["CSV Ingestion"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
     app.include_router(
         advise_router, tags=["Decision Engine"],
-        dependencies=[Depends(require_auth)],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
 
     return app
