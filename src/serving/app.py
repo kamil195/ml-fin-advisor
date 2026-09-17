@@ -17,6 +17,9 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from src.serving.security import SecurityConfig, SecurityHeadersMiddleware
 
 from src.serving.cache import CacheClient, CACHE_TTLS
 from src.serving.rate_limit import SlidingWindowLimiter, enforce_rate_limit
@@ -119,18 +122,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS
+    security = SecurityConfig.from_env()
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "https://useplanwisely.vercel.app",
-            "http://localhost:5173",
-            "http://localhost:3000",
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=list(security.origins),
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type"],
+        expose_headers=["Retry-After"],
     )
+    app.add_middleware(
+        TrustedHostMiddleware, allowed_hosts=list(security.hosts), www_redirect=False,
+    )
+    app.add_middleware(SecurityHeadersMiddleware, headers=security.headers())
 
     # SECURITY STEP 6: identity-aware rate limiting for authenticated
     # financial routes (single-worker in-memory sliding window — see
@@ -165,7 +169,8 @@ def create_app() -> FastAPI:
             "Unhandled internal error on %s %s", request.method, request.url.path
         )
         return JSONResponse(
-            status_code=500, content={"detail": "Internal server error."}
+            status_code=500, content={"detail": "Internal server error."},
+            headers=security.headers(),
         )
 
     # Register routers
