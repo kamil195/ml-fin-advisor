@@ -278,9 +278,11 @@ function authenticate(email, apiKey) {
   state.userId = 'user_' + String(Math.abs(hashCode(email)) % 1000000).padStart(6, '0');
   syncDemoModeUi();
 
-  // Save to localStorage for persistence
-  localStorage.setItem('finwise_email', email);
-  localStorage.setItem('finwise_apiKey', apiKey);
+  // Session-only persistence (PRIVACY STEP 8): email/api-key are kept in
+  // sessionStorage so closing the tab clears them — nothing financial or
+  // identity-related survives the browser session on disk.
+  sessionStorage.setItem('finwise_email', email);
+  sessionStorage.setItem('finwise_apiKey', apiKey);
 
   // Update sidebar
   const name = email.split('@')[0];
@@ -295,8 +297,8 @@ function authenticate(email, apiKey) {
 
 function doLogout() {
   state = { email: null, apiKey: null, userId: null };
-  localStorage.removeItem('finwise_email');
-  localStorage.removeItem('finwise_apiKey');
+  sessionStorage.removeItem('finwise_email');
+  sessionStorage.removeItem('finwise_apiKey');
   syncDemoModeUi();
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
@@ -304,10 +306,10 @@ function doLogout() {
   document.getElementById('loginKey').value   = '';
 }
 
-/* ── Initialize Session from localStorage ──────────────────── */
+/* ── Initialize Session from sessionStorage ─────────────── */
 function restoreSessionFromStorage() {
-  const savedEmail = localStorage.getItem('finwise_email');
-  const savedKey = localStorage.getItem('finwise_apiKey');
+  const savedEmail = sessionStorage.getItem('finwise_email');
+  const savedKey = sessionStorage.getItem('finwise_apiKey');
   if (savedEmail && savedKey) {
     document.getElementById('loginEmail').value = savedEmail;
     document.getElementById('loginKey').value = savedKey;

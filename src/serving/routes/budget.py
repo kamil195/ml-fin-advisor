@@ -54,7 +54,7 @@ async def get_budget(
     # Check cache
     cached = cache.get("budgets", uid)
     if cached is not None:
-        logger.info("Cache HIT for budget %s", uid)
+        logger.info("Cache HIT for budget (user-scoped)")
         return BudgetResult(**cached)
 
     try:

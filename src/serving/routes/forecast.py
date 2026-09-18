@@ -51,7 +51,7 @@ async def get_forecast(
     cache_key_parts = [uid, str(horizon), categories]
     cached = cache.get("forecasts", *cache_key_parts)
     if cached is not None:
-        logger.info("Cache HIT for forecast %s", uid)
+        logger.info("Cache HIT for forecast (user-scoped)")
         return ForecastResult(**cached)
 
     try:

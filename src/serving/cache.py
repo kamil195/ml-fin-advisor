@@ -6,6 +6,12 @@ Cache strategy:
   - Forecasts: TTL 24h, invalidate on nightly batch run
   - Budget recommendations: TTL 7d, invalidate on preference change
   - SHAP explanations: TTL 30d, invalidate on model version change
+
+Privacy/data-lifecycle (SECURITY STEP 8): both the Redis path and the
+in-memory fallback honour TTLs — cached user-scoped data is never retained
+indefinitely, and the fallback purges expired entries deterministically on
+every write. Cache keys are identity-namespaced and never contain bearer
+tokens, emails, or credentials.
 """
 
 from __future__ import annotations
@@ -13,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -39,7 +46,10 @@ class CacheClient:
     ) -> None:
         self.default_ttl = default_ttl
         self._redis: Any = None
-        self._local_cache: dict[str, Any] = {}
+        # key -> (monotonic expiry, value). The in-memory fallback honours
+        # TTLs exactly like the Redis path: cached user data must never be
+        # retained indefinitely (privacy/data-lifecycle requirement).
+        self._local_cache: dict[str, tuple[float, Any]] = {}
 
         try:
             import redis
@@ -71,7 +81,15 @@ class CacheClient:
                 return json.loads(val)
             return None
 
-        return self._local_cache.get(key)
+        entry = self._local_cache.get(key)
+        if entry is None:
+            return None
+        expires_at, value = entry
+        if expires_at <= time.monotonic():
+            # Lazy expiry: a stale entry is dropped on first access.
+            self._local_cache.pop(key, None)
+            return None
+        return value
 
     def set(
         self,
@@ -82,12 +100,22 @@ class CacheClient:
     ) -> None:
         """Store a value in cache."""
         key = self._make_key(namespace, *parts)
-        ttl = ttl or self.default_ttl
+        ttl = self.default_ttl if ttl is None else int(ttl)
 
         if self._redis is not None:
-            self._redis.setex(key, ttl, json.dumps(value, default=str))
+            if ttl > 0:
+                self._redis.setex(key, ttl, json.dumps(value, default=str))
+            # ttl <= 0 means "do not retain" — nothing is stored.
         else:
-            self._local_cache[key] = value
+            # Deterministic cleanup: expired entries are purged on every
+            # write, so the fallback cache cannot accumulate stale user data.
+            now = time.monotonic()
+            expired = [k for k, (exp, _) in self._local_cache.items() if exp <= now]
+            for k in expired:
+                self._local_cache.pop(k, None)
+            if ttl > 0:
+                self._local_cache[key] = (now + ttl, value)
+            # ttl <= 0 means "do not retain" — nothing is stored.
 
     def invalidate(self, namespace: str, *parts: str) -> None:
         """Remove a cached entry."""
