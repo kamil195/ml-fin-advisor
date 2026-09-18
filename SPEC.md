@@ -332,7 +332,7 @@ This is **authorization isolation, NOT model personalization.** Artifact MAPE â‰
 
 **Hard-protected categories (never reduced):** Rent/Mortgage, Utilities, Home Insurance, Insurance Premiums, Loan Payments, Taxes (`HARD_PROTECTED_CATEGORIES`). `Uncategorized` is excluded from optimization.
 
-**Budget acceptance:** ~78.86% on synthetic evaluation. Do not market an older 80.9% figure as verified.
+**Budget acceptance:** ~78.86% on synthetic evaluation. Do not market any previously circulated, unverified acceptance figure as verified.
 
 **Explanations:** each recommendation includes SHAP feature attributions, an anchor rule, and a counterfactual via the ExplanationEngine (`src/models/recommender/explanations.py`).
 

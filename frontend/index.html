@@ -174,7 +174,7 @@
           <h1 class="page-title">Spending Forecast</h1>
           <p class="page-subtitle">See where your money is going</p>
         </div>
-        <span class="badge">🎯 AI Accuracy: 92%</span>
+        <span class="badge">🎯 Demo build — verified metrics on the Metrics page</span>
       </div>
 
       <div class="form-grid" style="max-width:400px">
@@ -190,7 +190,7 @@
 
       <button class="btn btn-primary" style="max-width:400px" onclick="getForecast()">📊 Show My Forecast</button>
 
-      <div class="spinner" id="forecastSpinner">AI is predicting your spending…</div>
+      <div class="spinner" id="forecastSpinner">Calculating your spending forecast…</div>
       <div class="alert alert-error" id="forecastError"></div>
 
       <div class="chart-placeholder" id="forecastChart">
@@ -201,11 +201,11 @@
     <!-- ── Budget Page ──────────────────────────────────── -->
     <section class="page" id="page-budget">
       <h1 class="page-title">Budget Recommendations</h1>
-      <p class="page-subtitle">Personalized spending limits based on your habits</p>
+      <p class="page-subtitle">Spending limits computed from the financial profile you provide</p>
 
       <button class="btn btn-primary" style="max-width:400px" onclick="getBudget()">💰 Create My Budget</button>
 
-      <div class="spinner" id="budgetSpinner">AI is analyzing your habits…</div>
+      <div class="spinner" id="budgetSpinner">Analyzing your financial profile…</div>
       <div class="alert alert-error" id="budgetError"></div>
 
       <div id="budgetResult"></div>
@@ -218,24 +218,32 @@
 
       <div class="about-stats">
         <div>
-          <div class="about-stat-value">99.96%</div>
-          <div class="about-stat-label">Classification Accuracy</div>
+          <div class="about-stat-value">89.10%</div>
+          <div class="about-stat-label">Classification accuracy (synthetic eval)</div>
         </div>
         <div>
-          <div class="about-stat-value">92%</div>
-          <div class="about-stat-label">Forecast Accuracy</div>
+          <div class="about-stat-value">6.10%</div>
+          <div class="about-stat-label">Forecast MAPE, lower is better (synthetic eval)</div>
         </div>
         <div>
-          <div class="about-stat-value">80.9%</div>
-          <div class="about-stat-label">Budget Acceptance Rate</div>
+          <div class="about-stat-value">78.86%</div>
+          <div class="about-stat-label">Budget acceptance (synthetic eval)</div>
         </div>
       </div>
 
+      <p class="about-text" style="font-weight:600">
+        All figures come from synthetic-labelled evaluation data — not
+        production or real-customer performance. Full context is on the
+        Metrics page.
+      </p>
+
       <p class="about-text">
         FinWise AI uses a LightGBM classifier for transaction categorization,
-        an ensemble forecaster combining Prophet and LightGBM for spending prediction,
-        and a scipy-based optimizer for personalized budget recommendations.
-        Every decision is explained with SHAP feature attributions.
+        a Prophet-based forecasting artifact, and a deterministic
+        scipy-based budget optimizer driven by the financial profile you
+        provide. Transaction classifications include model confidence,
+        top-3 alternatives and SHAP feature attributions; budget and
+        scenario logic is deterministic and testable.
       </p>
     </section>
 
