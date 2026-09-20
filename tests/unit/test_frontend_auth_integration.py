@@ -55,7 +55,7 @@ def test_no_api_key_state_or_input():
     for needle in (
         "apiKey",
         "loginKey",
-        "finwise_apiKey",
+        "legacy_apiKey",
         "DEMO_LOGIN_LABEL",
         "demoLogin",
         "readApiError",
