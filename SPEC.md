@@ -131,10 +131,16 @@ The serving layer is a **FastAPI** application:
 | GET | `/v1/forecast/{user_id}` | Expense forecast for an owner |
 | GET | `/v1/budget/{user_id}` | Budget recommendations for an owner |
 | POST | `/consumer/advise` | Deterministic financial advice |
-| POST | `/consumer/transactions/ingest-csv` | CSV ingestion with ownership checks |
+| POST | `/consumer/transactions/ingest-csv` | CSV ingestion with ownership checks; persists user-owned transactions (when `DATABASE_URL` is configured) |
 | POST | `/consumer/classify/live` | Live classification |
 | POST | `/consumer/forecast/live` | Live forecast |
 | POST | `/consumer/budget/live` | Live budget |
+| GET | `/consumer/profile` | Caller's saved financial profile (owner = JWT `sub`) |
+| PUT | `/consumer/profile` | Create/update the caller's financial profile |
+| GET | `/consumer/transactions` | List the caller's persisted transactions |
+| DELETE | `/consumer/transactions/{id}` | Delete one caller-owned transaction |
+| GET | `/consumer/data/export` | Export all caller-owned persisted data (JSON) |
+| DELETE | `/consumer/data` | Delete all caller-owned persisted data (fail-closed, transactional) |
 
 ### 8.2 Public Endpoints (intentionally public)
 
@@ -144,7 +150,6 @@ The serving layer is a **FastAPI** application:
 | GET | `/ready` | Model readiness |
 | GET | `/docs`, `/redoc`, `/openapi.json` | API documentation |
 | GET | `/favicon.ico` | Favicon |
-| POST | `/admin/generate-key` | **KNOWN SECURITY ISSUE — Step 4 scope** |
 
 ---
 

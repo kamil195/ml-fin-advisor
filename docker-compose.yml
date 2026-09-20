@@ -21,6 +21,10 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1,testserver}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
       - SECURITY_HSTS_ENABLED=${SECURITY_HSTS_ENABLED:-false}
+      # STEP 12: user-owned persistence (server-side only; host supplies the
+      # real DSN — never committed). Empty value = persistence disabled.
+      - DATABASE_URL=${DATABASE_URL:-}
+      - DATABASE_CONNECT_TIMEOUT=${DATABASE_CONNECT_TIMEOUT:-5}
     depends_on:
       redis:
         condition: service_healthy

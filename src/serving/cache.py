@@ -142,6 +142,41 @@ class CacheClient:
         return count
 
 
+    # ── STEP 12J: user-scoped invalidation (never global) ──────────────────
+    # User namespaces from PRIVACY_DATA_LIFECYCLE.md §5; keys contain only the
+    # JWT subject. `budgets:<sub>` is an exact single key; the other
+    # namespaces key as `<ns>:<sub>:<parts>` and are removed by prefix,
+    # restricted to the caller's own subject.
+    USER_CACHE_NAMESPACES = ("budgets", "forecasts", "features", "explanations")
+
+    def invalidate_prefix(self, prefix: str) -> int:
+        """Remove every entry whose key starts with ``prefix``; returns count."""
+        if self._redis is not None:
+            keys = list(self._redis.keys(f"{prefix}*"))
+            if keys:
+                return int(self._redis.delete(*keys))
+            return 0
+        to_remove = [k for k in self._local_cache if k.startswith(prefix)]
+        for k in to_remove:
+            del self._local_cache[k]
+        return len(to_remove)
+
+    def purge_user(self, user_id: str) -> int:
+        """Remove every cache entry belonging to ONE user (Step 12J).
+
+        Scope is strictly per-user: the caller's exact ``budgets`` key plus
+        their ``forecasts/features/explanations`` prefixed keys. Other users'
+        entries and global namespaces are untouched. Keys contain only the
+        JWT subject — never tokens, emails, or credentials.
+        """
+        removed = self.invalidate("budgets", user_id) or 0
+        for namespace in self.USER_CACHE_NAMESPACES:
+            if namespace == "budgets":
+                continue  # already removed above as an exact key
+            removed += self.invalidate_prefix(f"{namespace}:{user_id}:")
+        return removed
+
+
 # ── Pre-configured cache instances with SPEC TTLs ─────────────────────────────
 
 # TTLs from SPEC §11.3

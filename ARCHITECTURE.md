@@ -239,6 +239,32 @@ Hard-protected categories: Rent/Mortgage, Utilities, Home Insurance, Insurance P
 Classified Transactions → build_financial_profile → FinancialProfile
 ```
 
+---
+
+## 16a. Persistence (STEP 12 — user-owned, Supabase Postgres)
+
+```text
+JWT sub (owner) ──► src/serving/persistence.py (psycopg 3, server-side DSN)
+                      ├─ user_profiles   (profile inputs, PK owner_sub)
+                      ├─ transactions    (classified CSV rows, owner-scoped)
+                      └─ ingest_batches  (upload audit trail)
+```
+
+* Identity/ownership: every row carries `owner_sub` = verified JWT subject;
+  every query is explicitly scoped by it (no unscoped fallback, no RLS
+  reliance — the backend's privileged role bypasses RLS).
+* Schema: `migrations/001_user_persistence.sql` (plain versioned SQL, no ORM;
+  SQLAlchemy is only a transitive MLflow dependency).
+* Lifecycle: `GET /consumer/data/export` and `DELETE /consumer/data` are real
+  and transactional (fail-closed); mutations purge the caller's user-scoped
+  cache namespaces via `CacheClient.purge_user`.
+* NOT persisted: tokens/emails, derived forecast/budget/advise outputs,
+  habit strengths / compliance history. Deployment without `DATABASE_URL`
+  disables only the user-data routes (generic 503); everything else runs.
+* Deliberately unchanged in this step: classifier, forecast math, budget
+  math, ScenarioEngine/DecisionEngine; forecasting remains non-personalized
+  and Safe-to-Spend remains unimplemented.
+
 Honesty rules: Income ONLY from CategoryL2.INCOME. No fabricated income.
 
 ---

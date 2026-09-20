@@ -96,8 +96,26 @@ async def lifespan(app: FastAPI):
     """Application lifespan: load models on startup, clean up on shutdown."""
     logger.info("ML Fin-Advisor serving layer starting up…")
     _load_artefacts(app)
+    # STEP 12: user-owned persistence (Supabase Postgres via DATABASE_URL).
+    # Absent/unreachable DB never blocks startup — persistence-backed routes
+    # fail closed with a generic 503; every other route is unaffected.
+    from src.serving.persistence import PersistenceConfig, PostgresStore
+
+    config = PersistenceConfig.from_env()
+    app.state.store = PostgresStore(config) if config is not None else None
+    if app.state.store is None:
+        logger.info(
+            "Persistence not configured (no %s) — user-data routes disabled",
+            PersistenceConfig.env_var_name(),
+        )
     logger.info("Model artefacts loaded — ready to serve.")
     yield
+    # STEP 12: release the persistence connection cleanly (best-effort).
+    # Guarded: any store-like object (e.g. a test double) may be installed.
+    store = getattr(app.state, "store", None)
+    close = getattr(store, "close", None)
+    if callable(close):
+        close()
     logger.info("ML Fin-Advisor serving layer shutting down.")
 
 
@@ -110,6 +128,7 @@ def create_app() -> FastAPI:
     from src.serving.routes.health import router as health_router
     from src.serving.routes.ingest import router as ingest_router
     from src.serving.routes.live import router as live_router
+    from src.serving.routes.user_data import router as user_data_router
 
     app = FastAPI(
         title="ML Fin-Advisor API",
@@ -127,7 +146,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=list(security.origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
         expose_headers=["Retry-After"],
     )
@@ -197,6 +216,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         advise_router, tags=["Decision Engine"],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
+    )
+    # STEP 12: user-owned persistence (profile / transactions / data lifecycle).
+    app.include_router(
+        user_data_router, tags=["User Data"],
         dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
 

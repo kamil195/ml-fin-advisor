@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from src.data.ingestion import validate_and_parse_rows
 from src.data.models import Transaction, ValidationReport
 from src.serving.auth import AuthPrincipal, require_auth
+from src.serving.persistence import DETAIL_503, PersistenceUnavailable
 from src.serving.routes.classify import (
     ClassifyRequest,
     ClassifyResponse,
@@ -50,6 +51,9 @@ class IngestCsvResponse(BaseModel):
     classified_count: int
     rejected: ValidationReport
     classified: list[dict[str, Any]]
+    # STEP 12F: persistence outcome for this upload (additive field).
+    # enabled=False when the deployment has no DATABASE_URL configured.
+    persistence: dict[str, Any] = {}
 
 
 def _looks_like_csv(filename: str | None, content_type: str | None) -> bool:
@@ -133,6 +137,7 @@ async def ingest_transactions_csv(
     # (z-score, rolling spend, 24h count, etc. computed over prior rows only).
     ordered = sorted(transactions, key=lambda t: t.timestamp)
     classified: list[dict[str, Any]] = []
+    persist_rows: list[dict[str, Any]] = []
     user_history: dict[str, list[Transaction]] = {}
     for t in ordered:
         uid = t.user_id
@@ -141,8 +146,51 @@ async def ingest_transactions_csv(
             ClassifyRequest(transaction=t), request, history=prior
         )
         classified.append(_classify_item(t, res))
+        # STEP 12F: persistable row for the same classified transaction, built
+        # from the validated Transaction (identity = principal.sub, enforced
+        # above) — the CSV's user_id column is never used as authority.
+        persist_rows.append({
+            "occurred_at": t.timestamp,
+            "amount": t.amount,
+            "currency": t.currency,
+            "merchant_name": t.merchant_name,
+            "merchant_mcc": t.merchant_mcc,
+            "account_type": getattr(t.account_type, "value", t.account_type),
+            "channel": getattr(t.channel, "value", t.channel),
+            "location_city": t.location_city,
+            "location_country": getattr(t.location_country, "value", t.location_country),
+            "raw_description": t.raw_description or "",
+            "is_pending": bool(t.is_pending),
+            "category_l1": getattr(res.category_l1, "value", res.category_l1),
+            "category_l2": getattr(res.category_l2, "value", res.category_l2),
+            "confidence": res.confidence,
+            "source": "csv_ingest",
+        })
         # Current transaction becomes part of history for later rows of this user.
         user_history.setdefault(uid, []).append(t)
+
+    # ── STEP 12F: persist user-owned transactions (when configured) ────────
+    store = getattr(request.app.state, "store", None)
+    persistence_block: dict[str, Any] = {"enabled": store is not None}
+    if store is not None:
+        try:
+            batch_id = store.create_ingest_batch(
+                principal.sub, "csv_ingest", len(transactions)
+            )
+            persisted, skipped = store.insert_transactions(
+                principal.sub, persist_rows, batch_id
+            )
+        except PersistenceUnavailable:
+            # Fail closed: a persistence failure must not masquerade as a
+            # successful ingest. Generic, safe 503 — no SQL/DSN details.
+            raise HTTPException(status_code=503, detail=DETAIL_503) from None
+        persistence_block.update(
+            {
+                "ingest_batch_id": batch_id,
+                "persisted_rows": persisted,
+                "duplicate_rows_skipped": skipped,
+            }
+        )
 
     return IngestCsvResponse(
         total_rows=len(rows),
@@ -151,4 +199,5 @@ async def ingest_transactions_csv(
         classified_count=len(classified),
         rejected=report,
         classified=classified,
+        persistence=persistence_block,
     )

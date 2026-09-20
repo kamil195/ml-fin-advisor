@@ -17,3 +17,5 @@ pyarrow>=15.0,<17.0
 pyjwt[crypto]>=2.8,<3.0
 # Forecasting engine (real Prophet path used by src/models/forecaster/prophet_model.py).
 prophet>=1.1,<2.0
+# STEP 12: user-owned persistence on Supabase Postgres (server-side psycopg 3).
+psycopg[binary]>=3.1,<4.0

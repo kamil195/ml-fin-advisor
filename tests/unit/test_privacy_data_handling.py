@@ -232,8 +232,14 @@ def test_privacy_documentation_exists_and_honest():
     from pathlib import Path
 
     doc = Path("PRIVACY_DATA_LIFECYCLE.md").read_text(encoding="utf-8")
-    assert "No production database" in doc
-    assert "no production DB persistence" in doc or "persistence layer" in doc
+    # STEP 12: the doc must now describe real persistence honestly — including
+    # the tables, the JWT-sub ownership key, and the auth-account limitation.
+    assert "owner_sub" in doc
+    assert "Supabase" in doc and "Postgres" in doc
+    assert "DELETE /consumer/data" in doc
+    assert "GET /consumer/data/export" in doc
+    assert "Auth account" in doc or "account deletion" in doc.lower()
+    assert "not yet implemented" in doc  # retention / account deletion
     assert "never logged" in doc or "never written to disk" in doc
     assert "Privacy Policy" in doc  # launch-blocker status stated
     # No legal-compliance claims invented.

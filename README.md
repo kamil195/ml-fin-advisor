@@ -231,25 +231,21 @@ Deterministic engines. No randomness, no LLM calls. All numbers from underlying 
 
 | Suite | Result |
 |---|---|
-| test_ownership.py | 22 passed |
-| test_auth.py | 20 passed |
-| test_auth_routes.py | 21 passed |
-| test_classify_endpoint.py | 7 passed |
-| test_csv_ingest_endpoint.py | 10 passed |
-| test_advise_endpoint.py | 12 passed |
-| **Full unit suite** | **224 passed, 1 skipped** |
+| Auth / ownership / error-handling / rate-limiting / security-headers batch | 103 passed |
+| Privacy / claims / frontend-auth / branding / frontend-security / CSV-ingest batch | 107 passed |
+| Advise + classify endpoint suites | 15 passed |
+| Persistence: transactions / profiles / data-lifecycle (Step 12) | 27 passed |
+| **Full unit suite** | **389 passed, 1 skipped** |
 | compileall | exit 0 |
 
 ---
 
 ## Current Limitations
 
-- Forecast artifact is global/demo/static (not personalized)
-- No production database
-- No rate limiting
+- Forecast artifact is global/demo/static (not personalized); no personalized forecasting yet
+- Safe-to-Spend not implemented/validated yet
+- Persistence (Step 12) is an MVP foundation: profile + transactions only; retention/backup policy unresolved; Supabase Auth account deletion is separate and not implemented
 - No privacy policy/terms
-- /admin/generate-key is public
-- No security headers
 - No observability/monitoring
 - Outputs are educational/portfolio demonstrations on synthetic/demo data — not professional financial advice; not connected to real bank accounts
 
