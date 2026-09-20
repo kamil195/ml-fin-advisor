@@ -252,7 +252,7 @@
 <!-- All JavaScript inlined directly in HTML -->
 <!-- Step 10: public deploy-time config, Supabase Auth client, then app code -->
 <script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
 <script src="auth.js"></script>
 <script>
 /* ── State ────────────────────────────────────────────────── */
@@ -372,26 +372,43 @@ async function getForecast() {
     }
     const data = await res.json();
 
-    // Render simple text-based forecast (chart library can be added later)
-    let html = '<div style="padding:2rem">';
+    // Render simple text-based forecast (chart library can be added later).
+    // Step 11: DOM construction + textContent only — backend-provided strings
+    // are never parsed as HTML.
+    const chart = document.getElementById('forecastChart');
+    chart.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.style.padding = '2rem';
     if (data.forecasts && data.forecasts.length) {
       data.forecasts.forEach(f => {
-        html += `
-          <div style="margin-bottom:1.5rem">
-            <div style="font-weight:500;margin-bottom:0.25rem">${f.category}</div>
-            <div style="display:flex;gap:2rem;font-size:0.875rem;color:var(--muted)">
-              <span>Low: $${(f.p10 || 0).toFixed(2)}</span>
-              <span>Expected: $${(f.p50 || 0).toFixed(2)}</span>
-              <span>High: $${(f.p90 || 0).toFixed(2)}</span>
-            </div>
-          </div>`;
+        const row = document.createElement('div');
+        row.style.marginBottom = '1.5rem';
+        const name = document.createElement('div');
+        name.style.fontWeight = '500';
+        name.style.marginBottom = '0.25rem';
+        name.textContent = f.category == null ? '' : String(f.category);
+        const vals = document.createElement('div');
+        vals.style.display = 'flex';
+        vals.style.gap = '2rem';
+        vals.style.fontSize = '0.875rem';
+        vals.style.color = 'var(--muted)';
+        [['Low', f.p10], ['Expected', f.p50], ['High', f.p90]].forEach(pair => {
+          const s = document.createElement('span');
+          s.textContent = pair[0] + ': $' + Number(pair[1] || 0).toFixed(2);
+          vals.appendChild(s);
+        });
+        row.appendChild(name);
+        row.appendChild(vals);
+        wrap.appendChild(row);
       });
     } else {
-      html += '<div style="color:var(--muted)">No forecast data available</div>';
+      const empty = document.createElement('div');
+      empty.style.color = 'var(--muted)';
+      empty.textContent = 'No forecast data available';
+      wrap.appendChild(empty);
     }
-    html += '</div>';
-    document.getElementById('forecastChart').innerHTML = html;
-    document.getElementById('forecastChart').style.height = 'auto';
+    chart.appendChild(wrap);
+    chart.style.height = 'auto';
   } catch (err) {
     if (err && err.name === 'AuthRequiredError') {
       showLogin();
@@ -409,7 +426,7 @@ async function getForecast() {
 async function getBudget() {
   hideAlert('budgetError');
   showSpinner('budgetSpinner');
-  document.getElementById('budgetResult').innerHTML = '';
+  document.getElementById('budgetResult').textContent = ''; // Step 11: no HTML sink
 
   try {
     const res = await apiFetch(`/v1/budget/${currentUserId()}`);
@@ -419,23 +436,44 @@ async function getBudget() {
     }
     const data = await res.json();
 
-    let html = '<div style="margin-top:2rem">';
+    // Step 11: DOM construction + textContent only — budget categories and
+    // explanations come from the backend and are never parsed as HTML.
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '2rem';
     if (data.recommendations && data.recommendations.length) {
       data.recommendations.forEach(rec => {
-        html += `
-          <div style="margin-bottom:1.5rem;padding-bottom:1.5rem">
-            <div style="display:flex;justify-content:space-between;align-items:baseline">
-              <span style="font-weight:500">${rec.category}</span>
-              <span style="font-size:1.25rem;font-weight:600">$${rec.recommended_budget.toFixed(2)}/mo</span>
-            </div>
-            <div style="font-size:0.875rem;color:var(--muted);margin-top:0.375rem">${rec.explanation || ''}</div>
-          </div>`;
+        const row = document.createElement('div');
+        row.style.marginBottom = '1.5rem';
+        row.style.paddingBottom = '1.5rem';
+        const head = document.createElement('div');
+        head.style.display = 'flex';
+        head.style.justifyContent = 'space-between';
+        head.style.alignItems = 'baseline';
+        const cat = document.createElement('span');
+        cat.style.fontWeight = '500';
+        cat.textContent = rec.category == null ? '' : String(rec.category);
+        const amt = document.createElement('span');
+        amt.style.fontSize = '1.25rem';
+        amt.style.fontWeight = '600';
+        amt.textContent = '$' + Number(rec.recommended_budget || 0).toFixed(2) + '/mo';
+        head.appendChild(cat);
+        head.appendChild(amt);
+        const why = document.createElement('div');
+        why.style.fontSize = '0.875rem';
+        why.style.color = 'var(--muted)';
+        why.style.marginTop = '0.375rem';
+        why.textContent = rec.explanation == null ? '' : String(rec.explanation);
+        row.appendChild(head);
+        row.appendChild(why);
+        wrap.appendChild(row);
       });
     } else {
-      html += '<div style="color:var(--muted)">No budget recommendations available</div>';
+      const empty = document.createElement('div');
+      empty.style.color = 'var(--muted)';
+      empty.textContent = 'No budget recommendations available';
+      wrap.appendChild(empty);
     }
-    html += '</div>';
-    document.getElementById('budgetResult').innerHTML = html;
+    document.getElementById('budgetResult').appendChild(wrap);
   } catch (err) {
     showAlert('budgetError', 'Could not load budget: ' + err.message);
   } finally {
@@ -501,25 +539,71 @@ function syncDemoModeUi() { /* removed with the legacy demo/API-key flow (Step 1
     return _f(u, opt);
   };
 })();
-function _advEsc(x){ return String(x).replace(/[&<>]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]; }); }
-function _advFmt(v){ return (typeof v === 'number') ? v.toLocaleString(undefined,{maximumFractionDigits:2}) : _advEsc(v); }
+function _advFmt(v){ return (typeof v === 'number') ? v.toLocaleString(undefined,{maximumFractionDigits:2}) : String(v == null ? '' : v); }
 function renderDecision(d){
+  // Step 11: DOM construction + textContent only. Advisor output is
+  // backend/model-provided text and is never parsed as HTML.
   var el = document.getElementById('adv-result');
+  el.textContent = '';
   var badge = d.status || d.decision_type || 'decision';
   var cls = ({feasible:'ok', partial:'warn', infeasible:'bad'})[badge] || 'info';
-  var h = '<span class="adv-badge adv-' + cls + '">' + _advEsc(badge) + '</span>';
-  h += '<p><b>' + _advEsc(d.recommendation || '') + '</b></p>';
-  if (d.reasoning) h += '<p style="font-size:12px;color:#374151">' + _advEsc(d.reasoning) + '</p>';
-  if (d.warnings && d.warnings.length) h += '<div class="adv-warnbox"><b>Warnings</b><ul style="margin:4px 0 0 16px;padding:0">' + d.warnings.map(function(w){ return '<li>' + _advEsc(w) + '</li>'; }).join('') + '</ul></div>';
-  if (d.alternatives && d.alternatives.length) h += '<div style="margin:6px 0"><b>Alternatives</b><ul style="margin:4px 0 0 16px;padding:0;font-size:12px">' + d.alternatives.map(function(a){ return '<li>' + _advEsc(typeof a === 'string' ? a : (a.description || JSON.stringify(a))) + '</li>'; }).join('') + '</ul></div>';
-  if (d.supporting_metrics) { h += '<table class="adv-metrics">' + Object.keys(d.supporting_metrics).map(function(k){ return '<tr><td>' + _advEsc(k) + '</td><td>' + _advFmt(d.supporting_metrics[k]) + '</td></tr>'; }).join('') + '</table>'; }
-  el.innerHTML = h;
+
+  var badgeEl = document.createElement('span');
+  badgeEl.className = 'adv-badge adv-' + cls; // class derived from a fixed lookup only
+  badgeEl.textContent = String(badge);
+  el.appendChild(badgeEl);
+
+  var recP = document.createElement('p');
+  var recB = document.createElement('b');
+  recB.textContent = d.recommendation == null ? '' : String(d.recommendation);
+  recP.appendChild(recB);
+  el.appendChild(recP);
+
+  if (d.reasoning) {
+    var rP = document.createElement('p');
+    rP.style.fontSize = '12px'; rP.style.color = '#374151';
+    rP.textContent = String(d.reasoning);
+    el.appendChild(rP);
+  }
+  if (d.warnings && d.warnings.length) {
+    var wBox = document.createElement('div');
+    wBox.className = 'adv-warnbox';
+    var wTitle = document.createElement('b'); wTitle.textContent = 'Warnings'; wBox.appendChild(wTitle);
+    var wList = document.createElement('ul'); wList.style.margin = '4px 0 0 16px'; wList.style.padding = '0';
+    d.warnings.forEach(function(w){ var li = document.createElement('li'); li.textContent = String(w); wList.appendChild(li); });
+    wBox.appendChild(wList);
+    el.appendChild(wBox);
+  }
+  if (d.alternatives && d.alternatives.length) {
+    var aBox = document.createElement('div'); aBox.style.margin = '6px 0';
+    var aTitle = document.createElement('b'); aTitle.textContent = 'Alternatives'; aBox.appendChild(aTitle);
+    var aList = document.createElement('ul');
+    aList.style.margin = '4px 0 0 16px'; aList.style.padding = '0'; aList.style.fontSize = '12px';
+    d.alternatives.forEach(function(a){
+      var li = document.createElement('li');
+      li.textContent = (typeof a === 'string') ? a : String((a && a.description) || JSON.stringify(a));
+      aList.appendChild(li);
+    });
+    aBox.appendChild(aList);
+    el.appendChild(aBox);
+  }
+  if (d.supporting_metrics) {
+    var table = document.createElement('table');
+    table.className = 'adv-metrics';
+    Object.keys(d.supporting_metrics).forEach(function(k){
+      var tr = document.createElement('tr');
+      var tdKey = document.createElement('td'); tdKey.textContent = String(k);
+      var tdVal = document.createElement('td'); tdVal.textContent = _advFmt(d.supporting_metrics[k]);
+      tr.appendChild(tdKey); tr.appendChild(tdVal); table.appendChild(tr);
+    });
+    el.appendChild(table);
+  }
 }
 async function requestAdvice(){
   var msg = document.getElementById('adv-msg'), box = document.getElementById('adv-result'), btn = document.getElementById('adv-btn');
   var tx = window.__sessionTxns || [];
   var raw = document.getElementById('adv-target').value;
-  msg.textContent = ''; box.innerHTML = '';
+  msg.textContent = ''; box.textContent = ''; // Step 11: no HTML sink
   if (!tx.length) { msg.textContent = 'Classify at least one transaction first.'; return; }
   var t = Number(raw);
   if (raw === '' || isNaN(t) || t < 0) { msg.textContent = 'Enter a valid savings target (0 or more).'; return; }
@@ -545,12 +629,17 @@ async function uploadCsv(){
   var input=document.getElementById('csv-file'), msg=document.getElementById('csv-msg'), btn=document.getElementById('csv-btn');
   var file=input.files && input.files[0];
   if(!file){ msg.textContent='Choose a CSV file first.'; return; }
+  // Step 11: constrain the upload client-side (mirrors the backend 2 MB limit)
+  // and neutralise the filename before it is sent as a header value.
+  var MAX_CSV_BYTES = 2000000;
+  if(file.size > MAX_CSV_BYTES){ msg.textContent='CSV is too large — the maximum upload is 2 MB.'; return; }
+  var safeName = (file.name || 'transactions.csv').replace(/[^A-Za-z0-9._-]/g, '_');
   btn.disabled=true; btn.textContent='Uploading…'; msg.textContent='';
   try{
     var text = await file.text();
     // Step 10: authenticated upload — apiFetch attaches the Bearer token and
     // preserves the CSV Content-Type / X-Filename headers.
-    var r = await apiFetch('/consumer/transactions/ingest-csv', { method:'POST', headers:{'Content-Type':'text/csv','X-Filename':(file.name||'transactions.csv')}, body:text });
+    var r = await apiFetch('/consumer/transactions/ingest-csv', { method:'POST', headers:{'Content-Type':'text/csv','X-Filename':safeName}, body:text });
     var j = null; try { j = await r.json(); } catch(e){}
     if(!r.ok){
       var d = await apiErrorMessage(r);
