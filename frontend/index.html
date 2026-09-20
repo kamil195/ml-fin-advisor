@@ -10,22 +10,23 @@
 </head>
 <body>
 
-<!-- ── Login Overlay ──────────────────────────────────────── -->
+<!-- ── Login Overlay (Supabase Auth) ───────────────────────── -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
     <div class="login-brand">💰 FinWise AI</div>
     <div class="login-tagline">Intelligent Financial Guidance</div>
 
     <div class="form-group">
-      <label for="loginEmail">Email</label>
-      <input type="email" id="loginEmail" placeholder="your@email.com">
+      <label for="authEmail">Email</label>
+      <input type="email" id="authEmail" autocomplete="email" placeholder="your@email.com">
     </div>
     <div class="form-group">
-      <label for="loginKey">API Key</label>
-      <input type="password" id="loginKey" placeholder="Enter your API key">
+      <label for="authPassword">Password</label>
+      <input type="password" id="authPassword" autocomplete="current-password" placeholder="Your password">
     </div>
-    <button class="btn btn-primary" onclick="doLogin()">Connect</button>
-    <button class="btn-demo" onclick="demoLogin()">Try Demo</button>
+    <div id="authMessage" role="alert" style="display:none;margin:0.5rem 0;font-size:0.8125rem;color:var(--muted);"></div>
+    <button class="btn btn-primary" id="authSubmit" onclick="doSignIn()">Sign in</button>
+    <button class="btn-demo" id="authSignupBtn" onclick="doSignUp()">Sign up</button>
   </div>
 </div>
 
@@ -36,8 +37,6 @@
   <aside class="sidebar">
     <div class="sidebar-brand">
       💰 FinWise AI
-      <span id="demoModeBadge" style="display:none;margin-left:0.5rem;font-size:0.75rem;font-weight:600;vertical-align:middle;">🔬 Demo Mode</span>
-      <div id="demoQuotaStatus" style="display:none;margin-top:0.35rem;font-size:0.8125rem;color:var(--muted);"></div>
     </div>
 
     <nav>
@@ -251,84 +250,15 @@
 </div>
 
 <!-- All JavaScript inlined directly in HTML -->
+<!-- Step 10: public deploy-time config, Supabase Auth client, then app code -->
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="auth.js"></script>
 <script>
 /* ── State ────────────────────────────────────────────────── */
-const API_URL = 'https://fin-advisor-sa6h.onrender.com';
-// UI placeholder for the demo login button — NOT an API secret, never sent as a credential.
-const DEMO_LOGIN_LABEL = 'demo-user';
-let state = {
-  email:  null,
-  apiKey: null,
-  userId: null,
-};
-
-/* ── Auth ─────────────────────────────────────────────────── */
-function doLogin() {
-  const email  = document.getElementById('loginEmail').value.trim();
-  const apiKey = document.getElementById('loginKey').value.trim();
-  if (!email || !apiKey) return;
-  authenticate(email, apiKey);
-}
-
-function demoLogin() {
-  const emailInput = document.getElementById('loginEmail');
-  const keyInput = document.getElementById('loginKey');
-  if (!emailInput.value.trim()) {
-    emailInput.value = 'demo@example.com';
-  }
-  keyInput.value = DEMO_LOGIN_LABEL;
-  doLogin();
-}
-
-function authenticate(email, apiKey) {
-  state.email  = email;
-  state.apiKey = apiKey;
-  state.userId = 'user_' + String(Math.abs(hashCode(email)) % 1000000).padStart(6, '0');
-  syncDemoModeUi();
-
-  // Session-only persistence (PRIVACY STEP 8): email/api-key are kept in
-  // sessionStorage so closing the tab clears them — nothing financial or
-  // identity-related survives the browser session on disk.
-  sessionStorage.setItem('finwise_email', email);
-  sessionStorage.setItem('finwise_apiKey', apiKey);
-
-  // Update sidebar
-  const name = email.split('@')[0];
-  document.getElementById('userName').textContent  = name;
-  document.getElementById('userEmail').textContent = email;
-  document.getElementById('userAvatar').textContent = name[0].toUpperCase();
-
-  // Show app
-  document.getElementById('loginOverlay').style.display = 'none';
-  document.getElementById('appShell').style.display = 'flex';
-}
-
-function doLogout() {
-  state = { email: null, apiKey: null, userId: null };
-  sessionStorage.removeItem('finwise_email');
-  sessionStorage.removeItem('finwise_apiKey');
-  syncDemoModeUi();
-  document.getElementById('loginOverlay').style.display = 'flex';
-  document.getElementById('appShell').style.display = 'none';
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginKey').value   = '';
-}
-
-/* ── Initialize Session from sessionStorage ─────────────── */
-function restoreSessionFromStorage() {
-  const savedEmail = sessionStorage.getItem('finwise_email');
-  const savedKey = sessionStorage.getItem('finwise_apiKey');
-  if (savedEmail && savedKey) {
-    document.getElementById('loginEmail').value = savedEmail;
-    document.getElementById('loginKey').value = savedKey;
-    authenticate(savedEmail, savedKey);
-  } else {
-    syncDemoModeUi();
-  }
-}
-
-// Restore session when page loads
-window.addEventListener('load', restoreSessionFromStorage);
+const API_URL = window.__apiBase
+  ? window.__apiBase()
+  : 'https://fin-advisor-sa6h.onrender.com';
 
 /* ── Routing ──────────────────────────────────────────────── */
 document.querySelectorAll('.sidebar-nav a').forEach(link => {
@@ -369,27 +299,33 @@ async function classifyTransaction() {
   showSpinner('classifySpinner');
 
   try {
-    const res = await fetch(`${API_URL}/v1/classify`, {
+    // Step 10: authenticated request. Identity comes from the verified
+    // Supabase session (JWT `sub` server-side); the body's user_id is the
+    // session user id ONLY as a schema/routing value — the backend remains
+    // the authorization authority.
+    const res = await apiFetch('/v1/classify', {
       method: 'POST',
-      headers: {
-        'X-API-Key':    state.apiKey,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        amount,
-        merchant_name: merchant,
-        merchant_mcc:  mcc,
-        timestamp:     new Date().toISOString(),
-        channel,
+        transaction: {
+          user_id: currentUserId(),
+          timestamp: new Date().toISOString(),
+          amount,
+          currency: 'USD',
+          merchant_name: merchant,
+          merchant_mcc: mcc,
+          account_type: 'CHECKING',
+          channel,
+          raw_description: merchant,
+        },
       }),
     });
 
     if (!res.ok) {
-      throw await readApiError(res);
+      throw new Error(await apiErrorMessage(res));
     }
 
     const data = await res.json();
-    updateQuotaStatusFromResponse(res);
 
     // Category
     document.getElementById('resCategory').textContent = data.category_l2;
@@ -408,9 +344,11 @@ async function classifyTransaction() {
 
     showEl('classifyResult');
   } catch (err) {
-    showAlert('classifyError', 'Error: ' + err.message);
-    if (err.quotaMessage) {
-      setDemoQuotaStatus(err.quotaMessage);
+    if (err && err.name === 'AuthRequiredError') {
+      showLogin();
+      showAlert('classifyError', err.message);
+    } else {
+      showAlert('classifyError', 'Error: ' + err.message);
     }
   } finally {
     hideSpinner('classifySpinner');
@@ -425,16 +363,14 @@ async function getForecast() {
   document.getElementById('forecastChart').textContent = '';
 
   try {
-    const res = await fetch(
-      `${API_URL}/v1/forecast/${state.userId}?horizon=${horizon}`,
-      { headers: { 'X-API-Key': state.apiKey } }
+    const res = await apiFetch(
+      `/v1/forecast/${currentUserId()}?horizon=${horizon}`
     );
 
     if (!res.ok) {
-      throw await readApiError(res);
+      throw new Error(await apiErrorMessage(res));
     }
     const data = await res.json();
-    updateQuotaStatusFromResponse(res);
 
     // Render simple text-based forecast (chart library can be added later)
     let html = '<div style="padding:2rem">';
@@ -457,9 +393,11 @@ async function getForecast() {
     document.getElementById('forecastChart').innerHTML = html;
     document.getElementById('forecastChart').style.height = 'auto';
   } catch (err) {
-    showAlert('forecastError', 'Could not load forecast: ' + err.message);
-    if (err.quotaMessage) {
-      setDemoQuotaStatus(err.quotaMessage);
+    if (err && err.name === 'AuthRequiredError') {
+      showLogin();
+      showAlert('forecastError', err.message);
+    } else {
+      showAlert('forecastError', 'Could not load forecast: ' + err.message);
     }
     document.getElementById('forecastChart').textContent = 'Failed to load forecast';
   } finally {
@@ -474,16 +412,12 @@ async function getBudget() {
   document.getElementById('budgetResult').innerHTML = '';
 
   try {
-    const res = await fetch(
-      `${API_URL}/v1/budget/${state.userId}`,
-      { headers: { 'X-API-Key': state.apiKey } }
-    );
+    const res = await apiFetch(`/v1/budget/${currentUserId()}`);
 
     if (!res.ok) {
-      throw await readApiError(res);
+      throw new Error(await apiErrorMessage(res));
     }
     const data = await res.json();
-    updateQuotaStatusFromResponse(res);
 
     let html = '<div style="margin-top:2rem">';
     if (data.recommendations && data.recommendations.length) {
@@ -504,9 +438,6 @@ async function getBudget() {
     document.getElementById('budgetResult').innerHTML = html;
   } catch (err) {
     showAlert('budgetError', 'Could not load budget: ' + err.message);
-    if (err.quotaMessage) {
-      setDemoQuotaStatus(err.quotaMessage);
-    }
   } finally {
     hideSpinner('budgetSpinner');
   }
@@ -527,147 +458,38 @@ function hideAlert(id) {
   document.getElementById(id).classList.remove('show');
 }
 
-function syncDemoModeUi() {
-  const isDemo = state.apiKey === DEMO_LOGIN_LABEL;
-  const badge = document.getElementById('demoModeBadge');
-  if (badge) {
-    badge.style.display = isDemo ? 'inline-block' : 'none';
-  }
-  if (!isDemo) {
-    setDemoQuotaStatus('');
-  }
-}
-
-function setDemoQuotaStatus(message) {
-  const el = document.getElementById('demoQuotaStatus');
-  if (!el) return;
-  if (message) {
-    el.textContent = message;
-    el.style.display = 'block';
-  } else {
-    el.textContent = '';
-    el.style.display = 'none';
-  }
-}
-
-function formatQuotaMessage(quota) {
-  if (!quota || typeof quota !== 'object') return '';
-  const minute = quota.minute || quota;
-  const parts = [];
-  if (minute && typeof minute.remaining === 'number' && typeof minute.limit === 'number') {
-    parts.push(`${minute.remaining}/${minute.limit} requests remaining this minute`);
-  }
-  if (quota.day && typeof quota.day.remaining === 'number' && typeof quota.day.limit === 'number') {
-    parts.push(`${quota.day.remaining}/${quota.day.limit} requests remaining today`);
-  }
-  return parts.join(' · ');
-}
-
-function readQuotaFromHeaders(res) {
-  const minuteRemaining = res.headers.get('X-Demo-Requests-Minute-Remaining');
-  const minuteLimit = res.headers.get('X-Demo-Requests-Minute-Limit');
-  const dayRemaining = res.headers.get('X-Demo-Requests-Day-Remaining');
-  const dayLimit = res.headers.get('X-Demo-Requests-Day-Limit');
-
-  if (minuteRemaining === null || minuteLimit === null) return null;
-
-  const minuteRemainingNum = Number(minuteRemaining);
-  const minuteLimitNum = Number(minuteLimit);
-  const dayRemainingNum = dayRemaining === null ? null : Number(dayRemaining);
-  const dayLimitNum = dayLimit === null ? null : Number(dayLimit);
-
-  return {
-    minute: {
-      remaining: Number.isFinite(minuteRemainingNum) ? minuteRemainingNum : 0,
-      limit: Number.isFinite(minuteLimitNum) ? minuteLimitNum : 0,
-    },
-    day: dayRemainingNum !== null && dayLimitNum !== null && Number.isFinite(dayRemainingNum) && Number.isFinite(dayLimitNum)
-      ? {
-          remaining: dayRemainingNum,
-          limit: dayLimitNum,
-        }
-      : null,
-  };
-}
-
-function updateQuotaStatusFromResponse(res, quotaOverride) {
-  if (state.apiKey !== DEMO_LOGIN_LABEL) return;
-  const quotaMessage = formatQuotaMessage(quotaOverride || readQuotaFromHeaders(res));
-  setDemoQuotaStatus(quotaMessage);
-}
-
-async function readApiError(res) {
-  const text = await res.text();
-  let payload = null;
-  try {
-    payload = text ? JSON.parse(text) : null;
-  } catch (e) {
-    payload = null;
-  }
-
-  const detailValue = payload ? payload.detail : null;
-  const detail = typeof detailValue === 'string'
-    ? detailValue
-    : detailValue && typeof detailValue === 'object' && typeof detailValue.detail === 'string'
-      ? detailValue.detail
-      : (text || res.statusText || 'API error');
-  const error = new Error(`${res.status}: ${detail}`);
-  if (payload && payload.quota) {
-    error.quotaMessage = formatQuotaMessage(payload.quota);
-  } else if (detailValue && typeof detailValue === 'object' && detailValue.quota) {
-    error.quotaMessage = formatQuotaMessage(detailValue.quota);
-  } else if (state.apiKey === DEMO_LOGIN_LABEL) {
-    error.quotaMessage = formatQuotaMessage(readQuotaFromHeaders(res));
-  }
-  return error;
-}
-
-function hashCode(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h) + s.charCodeAt(i);
-    h |= 0;
-  }
-  return h;
-}
+function syncDemoModeUi() { /* removed with the legacy demo/API-key flow (Step 10) */ }
 
 /* ===== Decision Advisor (session-only MVP) ===== */
 (function(){
   window.__sessionTxns = window.__sessionTxns || [];
   window.__updSessionCount = function(){ var n=document.getElementById('adv-count'); if(n) n.textContent=String(window.__sessionTxns.length); };
   document.addEventListener('DOMContentLoaded', window.__updSessionCount);
-  var ADV = 'https://fin-advisor-sa6h.onrender.com';
-  try { if (typeof API_URL !== 'undefined') ADV = API_URL; else if (typeof BASE !== 'undefined') ADV = BASE; } catch(e){}
   var _f = window.fetch;
   window.fetch = async function(u, opt){
     opt = opt || {};
     var url = (typeof u === 'string') ? u : (u && u.url) || '';
     if (url.indexOf('/v1/classify') > -1 && opt.method === 'POST') {
       var b = {}; try { b = JSON.parse(opt.body || '{}'); } catch(e){}
-      if (!b.transaction) {
-        b = { transaction: {
-          user_id: b.user_id || 'web_user',
-          timestamp: b.timestamp || new Date().toISOString(),
-          amount: Number(b.amount || 0),
-          currency: String(b.currency || 'USD').toUpperCase(),
-          merchant_name: b.merchant_name || b.merchant || b.description || '',
-          merchant_mcc: Number(b.merchant_mcc || b.mcc || 0) || 5999,
-          account_type: String(b.account_type || 'CHECKING').toUpperCase(),
-          channel: String(b.channel || 'ONLINE').toUpperCase(),
-          description: b.description || b.raw_description || b.merchant_name || ''
-        }};
+      var t = b.transaction || {};
+      if (!t.user_id) {
+        // Schema completeness only: the verified session user id as a routing
+        // value. The backend (JWT `sub`) remains the authorization authority.
+        t = Object.assign({}, t, { user_id: window.currentUserId() });
+        b = Object.assign({}, b, { transaction: t });
         opt = Object.assign({}, opt, { body: JSON.stringify(b) });
       }
       var res = await _f(u, opt);
       try {
         if (res.ok) {
           var d = await res.clone().json();
-          var t = b.transaction;
-          if (d && (d.category_l2 || d.category_l1)) {
+          if (d && (d.category_l2 || d.category_l1) && t.user_id) {
             window.__sessionTxns.push({
-              user_id: t.user_id, timestamp: t.timestamp, amount: t.amount, currency: t.currency,
-              merchant_name: t.merchant_name, merchant_mcc: Number(t.merchant_mcc),
-              account_type: t.account_type, channel: t.channel,
+              user_id: t.user_id, timestamp: t.timestamp, amount: Number(t.amount || 0),
+              currency: String(t.currency || 'USD').toUpperCase(),
+              merchant_name: t.merchant_name || '', merchant_mcc: Number(t.merchant_mcc || 0),
+              account_type: String(t.account_type || 'CHECKING').toUpperCase(),
+              channel: String(t.channel || 'ONLINE').toUpperCase(),
               category_l1: d.category_l1, category_l2: d.category_l2, confidence: Number(d.confidence)
             });
             window.__updSessionCount();
@@ -703,18 +525,18 @@ async function requestAdvice(){
   if (raw === '' || isNaN(t) || t < 0) { msg.textContent = 'Enter a valid savings target (0 or more).'; return; }
   btn.disabled = true; btn.textContent = 'Thinking…';
   try {
-    var r = await fetch(ADVISE_BASE.replace(/\/$/, '') + '/consumer/advise', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ transactions: tx, params: { savings_target: t } }) });
+    var r = await apiFetch('/consumer/advise', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ transactions: tx, params: { savings_target: t } }) });
     if (!r.ok) {
-      var d = 'HTTP ' + r.status;
-      try { var j = await r.json(); d = (j.detail && (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail))) || d; } catch(e){}
+      var d = await apiErrorMessage(r);
       msg.textContent = 'Advisor error: ' + d; return;
     }
     renderDecision(await r.json());
-  } catch(e) { msg.textContent = 'Backend unavailable: ' + e.message; }
+  } catch(e) {
+    msg.textContent = (e && e.name === 'AuthRequiredError') ? e.message
+      : 'Could not reach the server. Please check your connection and try again.';
+  }
   finally { btn.disabled = false; btn.textContent = 'Get advice'; }
 }
-var ADVISE_BASE = 'https://fin-advisor-sa6h.onrender.com';
-try { if (typeof API_URL !== 'undefined') ADVISE_BASE = API_URL; else if (typeof BASE !== 'undefined') ADVISE_BASE = BASE; } catch(e){}
 window.requestAdvice = requestAdvice;
 </script>
 <script>
@@ -726,11 +548,13 @@ async function uploadCsv(){
   btn.disabled=true; btn.textContent='Uploading…'; msg.textContent='';
   try{
     var text = await file.text();
-    var r = await fetch(ADVISE_BASE.replace(/\/$/,'') + '/consumer/transactions/ingest-csv', { method:'POST', headers:{'Content-Type':'text/csv','X-Filename':(file.name||'transactions.csv')}, body:text });
+    // Step 10: authenticated upload — apiFetch attaches the Bearer token and
+    // preserves the CSV Content-Type / X-Filename headers.
+    var r = await apiFetch('/consumer/transactions/ingest-csv', { method:'POST', headers:{'Content-Type':'text/csv','X-Filename':(file.name||'transactions.csv')}, body:text });
     var j = null; try { j = await r.json(); } catch(e){}
     if(!r.ok){
-      var d = j && j.detail;
-      msg.textContent = 'Upload failed: ' + (typeof d === 'string' ? d : (d && d.message) ? d.message : ('HTTP ' + r.status));
+      var d = await apiErrorMessage(r);
+      msg.textContent = 'Upload failed: ' + d;
       return;
     }
     var added = 0;
@@ -745,10 +569,16 @@ async function uploadCsv(){
     }
     msg.textContent = line;
     input.value = '';
-  } catch(e){ msg.textContent = 'Upload error: ' + e.message; }
+  } catch(e){
+    msg.textContent = (e && e.name === 'AuthRequiredError') ? e.message
+      : 'Upload error: Could not reach the server. Please try again.';
+  }
   finally { btn.disabled = false; btn.textContent = 'Upload CSV'; }
 }
 window.uploadCsv = uploadCsv;
+
+/* ── Step 10: initialize Supabase auth on page load ─────────────── */
+if (window.initAuth) { window.initAuth(); }
 </script>
 
 <!-- ===== Decision Advisor (session-only MVP) ===== -->
