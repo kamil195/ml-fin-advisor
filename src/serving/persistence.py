@@ -78,6 +78,21 @@ class PersistenceConfig:
         return cls(dsn=raw, connect_timeout=max(1.0, min(timeout, 30.0)))
 
 
+# Column lists for owner-scoped SELECT/RETURNING statements. Module-level so
+# every repository method (and flake8's F821 global-name resolution) sees the
+# same definitions; strings mirror migrations/001_user_persistence.sql.
+_TXN_COLS = (
+    "id, occurred_at, amount, currency, merchant_name, merchant_mcc, "
+    "account_type, channel, location_city, location_country, "
+    "raw_description, is_pending, category_l1, category_l2, confidence, "
+    "source, ingest_batch_id, created_at"
+)
+_PROFILE_COLS = (
+    "owner_sub, income, savings_target, liquid_buffer, "
+    "total_debt, monthly_debt_payments, created_at, updated_at"
+)
+
+
 class PostgresStore:
     """Owner-scoped persistence operations on Supabase Postgres.
 
@@ -86,17 +101,6 @@ class PostgresStore:
     lock-serialized connection; multi-statement operations are transactional
     (all-or-nothing).
     """
-
-    _TXN_COLS = (
-        "id, occurred_at, amount, currency, merchant_name, merchant_mcc, "
-        "account_type, channel, location_city, location_country, "
-        "raw_description, is_pending, category_l1, category_l2, confidence, "
-        "source, ingest_batch_id, created_at"
-    )
-    _PROFILE_COLS = (
-        "owner_sub, income, savings_target, liquid_buffer, "
-        "total_debt, monthly_debt_payments, created_at, updated_at"
-    )
 
     def __init__(self, config: PersistenceConfig) -> None:
         self._config = config
