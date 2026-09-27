@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -36,6 +37,8 @@ from src.serving.routes.classify import (
 )
 
 router = APIRouter(prefix="/consumer", tags=["CSV Ingestion"])
+
+logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_BYTES = 2_000_000  # 2 MB
 MAX_ROWS = 1_000
@@ -191,6 +194,16 @@ async def ingest_transactions_csv(
                 "duplicate_rows_skipped": skipped,
             }
         )
+        # STEP 13I: new transactions change this user's own forecast inputs, so
+        # the caller's derived cache entries are dropped. Scoped strictly to
+        # the caller (never a global invalidation); cache is derived state, so a
+        # purge failure is logged by type only and never fails the ingest.
+        cache = getattr(request.app.state, "cache", None)
+        if cache is not None:
+            try:
+                cache.purge_user(principal.sub)
+            except Exception as exc:  # noqa: BLE001 — derived state, not authoritative
+                logger.warning("user cache purge failed (type: %s)", type(exc).__name__)
 
     return IngestCsvResponse(
         total_rows=len(rows),

@@ -1,7 +1,20 @@
 """
-GET /v1/forecast/{user_id} — Expense forecast endpoint (SPEC §11.2.2).
+GET /v1/forecast/{user_id} — global/static expense forecast reference
+(SPEC §11.2.2, §19).
 
-Returns per-category p10/p50/p90 forecasts from pre-computed model results.
+This endpoint replays the **global/static** training artifact
+(``models/serving/forecast_results.json``). It is NOT personalized: every user
+receives the same numbers, and the response says so explicitly via
+``personalization_status="not_personalized"`` / ``fallback_status="global_reference"``
+(STEP 13K). It is kept as a benchmark/demo reference.
+
+Personalized, user-specific forecasting — built from the caller's own persisted
+transaction history — lives at ``GET /consumer/forecast``
+(``src/serving/routes/personal_forecast.py``).
+
+Ownership (AUTH STEP 3) is unchanged: the requested ``user_id`` must equal the
+authenticated subject, and the response is scoped to that identity. That is
+authorization isolation, not model personalization.
 """
 
 from __future__ import annotations
@@ -136,6 +149,14 @@ async def get_forecast(
                 "p50": round(total_p50, 2),
                 "p90": round(total_p90, 2),
             },
+            # STEP 13K: explicit, honest labelling — this is the global/static
+            # artifact, never a personalized model for this user.
+            personalization_status="not_personalized",
+            fallback_status="global_reference",
+            method="global_static_artifact",
+            engine_version="global-static-v1",
+            history_days_used=0,
+            transaction_count_used=0,
         )
 
         # Cache the result

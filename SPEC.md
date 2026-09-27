@@ -317,16 +317,37 @@ Evaluation uses synthetic labels; do not present these as production accuracy.
 
 ## 19. Forecast Architecture
 
-Prophet-based monthly expense forecast by category, served from a pre-computed artifact.
+Two distinct paths; every response states which one produced it.
 
-**FORECAST LIMITATION (must be preserved):** the forecast artifact is **global/demo/static**. It is **NOT genuinely personalized per user**. Step 3 provides authorization isolation only:
+### 19.1 Personalized — `GET /consumer/forecast` (STEP 13)
 
 ```
-authenticated user → authorized request → global/static artifact
-→ response scoped to the requesting identity
+principal.sub ─► transactions.owner_sub (Step 12 persistence)
+             ─► zero-filled daily spend series (spend only; credits not netted)
+             ─► quality tier: personalized | limited_history | insufficient_history
+             ─► user-specific method (weekday profile; recent-mean fallback)
+             ─► daily p10/p50/p90 + horizon totals (interval from measured residuals)
 ```
 
-This is **authorization isolation, NOT model personalization.** Artifact MAPE ≈ 6.10% on synthetic/demo data — not customer production accuracy.
+- **Target:** total spend pressure over an explicit horizon (7–90 days, default 30).
+- **Minimum history:** Tier A ≥28 days / ≥20 spend transactions / ≥12 spend days; Tier B ≥14 days / ≥8 transactions; below that → `insufficient_history` + `requirements`, and **no numeric forecast is returned**.
+- **Method selection is measured, not assumed.** `pipelines/forecast_benchmark.py` runs expanding-window walk-forward validation (no random split anywhere) over 30 synthetic users (180-day history, 30-day horizon): weekday profile **37.66% WAPE** (median per-user 9.47%), Prophet 41.91% (balanced 5-user sample), recent-mean 53.55%, EWMA 53.64%, non-personalized global mean 56.00%. **Offline/synthetic — not customer or production accuracy.**
+- **Fallback policy:** the fallback is the *same user's* recent-mean baseline (`fallback_status="user_recent_baseline"`; `"primary_substituted"` when a requested method is replaced). A global artifact is **never** substituted, and no other user's rows can influence an output — every query is scoped by `owner_sub`.
+- **Caching:** `forecasts:<sub>:personal:<horizon>:<engine_version>`, TTL 24 h, purged on ingest / profile change / data deletion. Insufficient-history responses are not cached.
+- **Engine version:** `user-v1`.
+
+### 19.2 Legacy reference — `GET /v1/forecast/{user_id}`
+
+Replays the global/static training artifact and now says so explicitly:
+`personalization_status="not_personalized"`, `fallback_status="global_reference"`,
+`method="global_static_artifact"`, `history_days_used=0`. It is retained as a
+benchmark/demo reference. Artifact MAPE ≈ 6.10% belongs to a **different dataset**
+(per-category weekly totals over a demo period) and is **not comparable** to the
+personalized benchmark in §19.1.
+
+**Historical limitation (still true for this endpoint):** the artifact is
+**global/demo/static** and **NOT genuinely personalized per user** — per-request
+authorization isolation only, not model personalization. Not customer production accuracy.
 
 ---
 

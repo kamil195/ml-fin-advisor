@@ -106,10 +106,22 @@ def test_spec_classifier_table_is_synthetic_labelled():
     assert "NOT production customer metrics" in spec
 
 
-def test_readme_forecast_limitation_preserved():
+def test_readme_forecast_claims_are_honest():
+    """STEP 13 replaced the global artifact with user-specific forecasting; the
+    docs must describe what actually exists and never pass a synthetic
+    benchmark off as production accuracy."""
     readme = _texts()["README.md"]
+    # The personalized path is documented…
+    assert "own persisted transaction history" in readme
+    assert "limited_history" in readme and "insufficient_history" in readme
+    # …the legacy artifact is still named as global/static…
+    assert "global/static" in readme
     assert "NOT genuinely personalized" in readme
-    assert "global/demo/static" in readme
+    assert "not_personalized" in readme
+    # …and synthetic benchmark numbers carry their caveat.
+    assert "synthetic" in readme.lower()
+    assert "not customer or production accuracy" in readme
+    assert "not comparable" in readme
 
 
 def test_no_fake_customers_or_production_status():

@@ -147,10 +147,18 @@ Use verified contextualized metrics only. Never market synthetic benchmarks as c
 
 ## Phase 8 — Personalization
 
-**Status:** PLANNED
+**Status:** PARTIALLY DELIVERED (STEP 13)
 
 Replace global/static forecast with properly scoped per-user inference.
 Do not fake personalization.
+
+- ✅ **Delivered:** `GET /consumer/forecast` builds the forecast from the
+  authenticated user's own persisted history, with explicit
+  `personalized` / `limited_history` / `insufficient_history` statuses and a
+  user-specific fallback (a global artifact is never substituted). The legacy
+  global endpoint now labels itself `not_personalized`.
+- ⏳ **Remaining:** per-user model tournament at scale, retention/backups,
+  Safe-to-Spend.
 
 ---
 

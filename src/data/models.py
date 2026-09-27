@@ -245,7 +245,13 @@ class CategoryForecast(BaseModel):
 
 
 class ForecastResult(BaseModel):
-    """Full forecast response for a user."""
+    """Full forecast response for a user.
+
+    STEP 13K — truthfulness: this endpoint replays the **global/static**
+    training artifact, so every label below states that explicitly. A client can
+    never mistake this response for a personalized forecast, and the
+    personalized contract lives in :class:`PersonalForecastResult`.
+    """
 
     user_id: str
     generated_at: datetime
@@ -253,6 +259,78 @@ class ForecastResult(BaseModel):
     forecasts: list[CategoryForecast]
     total_spend: dict[str, float] = Field(
         description="Aggregate spend forecast: p10, p50, p90"
+    )
+    personalization_status: str = Field(
+        default="not_personalized",
+        description="Always 'not_personalized' here: output comes from a global artifact.",
+    )
+    fallback_status: str = Field(
+        default="global_reference",
+        description="Marks this output explicitly as a global (non-personal) reference.",
+    )
+    method: str = Field(
+        default="global_static_artifact",
+        description="This endpoint replays a static training artifact; no per-user model runs.",
+    )
+    engine_version: str = Field(
+        default="global-static-v1",
+        description="Identifier of the static artifact pipeline.",
+    )
+    history_days_used: int = Field(
+        default=0, description="Always 0 here: no user transaction history is used."
+    )
+    transaction_count_used: int = Field(
+        default=0, description="Always 0 here: no user transaction history is used."
+    )
+
+
+class PersonalForecastDaily(BaseModel):
+    """One day of a user-specific forecast (STEP 13A)."""
+
+    date: str = Field(description="ISO date (YYYY-MM-DD).")
+    p50: float = Field(description="Expected spend for the day.")
+    p10: float = Field(description="Lower bound of the 80% interval.")
+    p90: float = Field(description="Upper bound of the 80% interval.")
+
+
+class PersonalForecastResult(BaseModel):
+    """User-specific spend forecast built from the caller's own history.
+
+    ``personalization_status`` is authoritative and honest: ``personalized``
+    (Tier A), ``limited_history`` (Tier B) or ``insufficient_history`` (Tier C,
+    where no numeric forecast is produced and ``requirements`` explains what is
+    needed). Nothing global is ever substituted for a user's own data.
+    """
+
+    user_id: str
+    generated_at: datetime
+    engine_version: str = Field(description="Forecast engine identifier (cache/reproducibility).")
+    method: str = Field(description="Method that produced this forecast.")
+    personalization_status: str = Field(
+        description="personalized | limited_history | insufficient_history"
+    )
+    fallback_status: str = Field(
+        description=(
+            "none | user_recent_baseline | primary_substituted — every value is "
+            "user-specific; a global fallback is never used."
+        )
+    )
+    forecast_start: str | None = Field(default=None, description="First forecast day (ISO).")
+    forecast_end: str | None = Field(default=None, description="Last forecast day (ISO).")
+    horizon_days: int
+    interval_width: float = Field(description="Width of the reported interval (0.80).")
+    expected_spend: float | None = Field(
+        default=None, description="Total expected spend over the horizon (None when insufficient)."
+    )
+    total: dict[str, float] = Field(description="Horizon totals: p10, p50, p90.")
+    daily: list[PersonalForecastDaily] = Field(default_factory=list)
+    history_days_used: int = Field(description="Days of the caller's own history used.")
+    transaction_count_used: int = Field(description="Caller's own spend transactions used.")
+    distinct_spend_days_used: int
+    residual_sigma: float = Field(description="Measured one-step residual dispersion.")
+    message: str | None = Field(default=None, description="Non-misleading note when limited.")
+    requirements: dict[str, object] | None = Field(
+        default=None, description="What is needed when history is insufficient."
     )
 
 

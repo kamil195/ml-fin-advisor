@@ -29,6 +29,7 @@ import logging
 import os
 import threading
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,27 @@ class PostgresStore:
         with self._transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (owner_sub, limit, offset))
+                return list(cur.fetchall())
+
+    def fetch_spend_history(
+        self, owner_sub: str, since: datetime
+    ) -> list[dict[str, Any]]:
+        """Return ``owner_sub``'s spend rows on/after ``since`` (owner-scoped).
+
+        STEP 13B: the only user-history source for personalized forecasting.
+        The caller always passes the verified JWT subject; the query is scoped
+        by ``owner_sub`` exactly like every other repository statement, so no
+        cross-user history can ever be returned. Ordered chronologically.
+        """
+        sql = (
+            "SELECT occurred_at, amount, category_l2, is_pending"
+            " FROM transactions"
+            " WHERE owner_sub = %s AND occurred_at >= %s"
+            " ORDER BY occurred_at"
+        )
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (owner_sub, since))
                 return list(cur.fetchall())
 
     def delete_transaction(self, owner_sub: str, transaction_id: str) -> bool:

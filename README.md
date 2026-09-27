@@ -191,9 +191,11 @@ LightGBM, 30 L2 categories, 157 features.
 
 ## Forecasting
 
-Prophet-based. **LIMITATION:** Current artifact is global/demo/static — NOT genuinely personalized. Authorization isolation only.
+**`GET /consumer/forecast` — personalized.** The forecast is built from the authenticated user's **own persisted transaction history** (`principal.sub` → `transactions.owner_sub`). Sparse-history users receive an explicit `limited_history` or `insufficient_history` status instead of a falsely personalized number, and no other user's data is ever substituted. Method selection is measured, not assumed: an offline benchmark (`pipelines/forecast_benchmark.py`, expanding-window walk-forward validation) compares a weekday-aware profile, a recent-mean baseline, EWMA, Prophet and a **non-personalized** global mean — the weekday profile wins and serves, with the user's own recent mean as fallback.
 
-MAPE: ~6.10% (synthetic/demo data).
+Offline synthetic benchmark (30 synthetic users, 180-day history, 30-day horizon): weekday profile **WAPE 37.66%** (median per-user 9.47%) vs **56.00%** for the non-personalized global mean; Prophet 41.91% on a balanced 5-user sample. **These are synthetic/offline numbers — not customer or production accuracy.**
+
+**Legacy reference (`GET /v1/forecast/{user_id}`):** replays the global/static training artifact, which is **NOT genuinely personalized per user** (authorization isolation only, not model personalization), and is explicitly labelled `personalization_status: "not_personalized"` / `fallback_status: "global_reference"` / `method: "global_static_artifact"`. Its MAPE ~6.10% comes from a different dataset (per-category weekly totals over a demo period) and is **not comparable** to the personalized benchmark above.
 
 ---
 

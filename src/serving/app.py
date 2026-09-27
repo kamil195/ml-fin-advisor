@@ -128,6 +128,7 @@ def create_app() -> FastAPI:
     from src.serving.routes.health import router as health_router
     from src.serving.routes.ingest import router as ingest_router
     from src.serving.routes.live import router as live_router
+    from src.serving.routes.personal_forecast import router as personal_forecast_router
     from src.serving.routes.user_data import router as user_data_router
 
     app = FastAPI(
@@ -221,6 +222,11 @@ def create_app() -> FastAPI:
     # STEP 12: user-owned persistence (profile / transactions / data lifecycle).
     app.include_router(
         user_data_router, tags=["User Data"],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
+    )
+    # STEP 13: user-specific forecasting from the caller's OWN persisted history.
+    app.include_router(
+        personal_forecast_router, tags=["Forecasting"],
         dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
 

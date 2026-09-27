@@ -179,6 +179,7 @@ Request → require_auth → verify_token → AuthPrincipal
 | budget.py | src/serving/routes/budget.py | Budget optimization |
 | advise.py | src/serving/routes/advise.py | Financial advice |
 | ingest.py | src/serving/routes/ingest.py | CSV ingestion |
+| personal_forecast.py | src/serving/routes/personal_forecast.py | User-specific forecasting (STEP 13) |
 | live.py | src/serving/routes/live.py | Live endpoints |
 
 ---
@@ -262,10 +263,46 @@ JWT sub (owner) ──► src/serving/persistence.py (psycopg 3, server-side DSN
   habit strengths / compliance history. Deployment without `DATABASE_URL`
   disables only the user-data routes (generic 503); everything else runs.
 * Deliberately unchanged in this step: classifier, forecast math, budget
-  math, ScenarioEngine/DecisionEngine; forecasting remains non-personalized
-  and Safe-to-Spend remains unimplemented.
+  math, ScenarioEngine/DecisionEngine; Safe-to-Spend remains unimplemented.
+  (Forecasting became user-specific in STEP 13 — see §16b.)
 
 Honesty rules: Income ONLY from CategoryL2.INCOME. No fabricated income.
+
+---
+
+## 16b. Personalized forecasting (STEP 13 — user-specific, no global substitution)
+
+```text
+principal.sub ─► fetch_spend_history(owner_sub, since)   (120-day lookback)
+             ─► zero-filled daily spend series (spend rows only)
+             ─► quality tier → personalized | limited_history | insufficient_history
+             ─► weekday profile (primary) · recent mean (user-specific fallback)
+             ─► daily p10/p50/p90 + horizon totals, cached per user+horizon
+```
+
+* Identity: `GET /consumer/forecast` derives the owner solely from
+  `principal.sub` — a caller cannot name another user, and every query in
+  `src/serving/persistence.py` is owner-scoped, so no other user's rows can
+  influence a result (isolation is enforced by the query, not by hope).
+* Honest statuses: ≥28 days / ≥20 spend txns / ≥12 spend days →
+  `personalized`; ≥14 days / ≥8 txns → `limited_history`; otherwise
+  `insufficient_history` with a `requirements` block and **no number** —
+  never fabricated precision.
+* Fallback policy: a global artifact is never substituted for missing history.
+  The fallback is the same user's own recent mean
+  (`fallback_status="user_recent_baseline"`), and a requested-but-unused
+  method is reported explicitly (`"primary_substituted"`).
+* Method selection is measured, not assumed: `pipelines/forecast_benchmark.py`
+  (expanding-window walk-forward, no random split) — weekday profile
+  **37.66% WAPE** vs non-personalized global mean **56.00%** over 30 synthetic
+  users (180-day history, 30-day horizon). Synthetic/offline only; never a
+  production or customer accuracy claim.
+* Legacy `GET /v1/forecast/{user_id}` keeps replaying the static artifact and
+  now labels itself `personalization_status="not_personalized"` /
+  `fallback_status="global_reference"`; its MAPE ≈ 6.10% comes from a
+  different dataset and is not comparable to the numbers above.
+* Cache: `forecasts:<sub>:personal:<horizon>:user-v1` (24h TTL), purged by
+  ingest / profile change / data deletion; insufficient responses not cached.
 
 ---
 
