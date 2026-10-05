@@ -2,12 +2,20 @@
 
 Strategy
 --------
-Supabase signs access tokens with RS256 and publishes the current signing keys
-at ``{SUPABASE_URL}/auth/v1/.well-known/jwks.json``. This module verifies tokens
-against that JWKS using the PyJWT ``PyJWKClient``. The key set is cached by the
-client, so verification normally performs **no** network I/O per request; a new
-key set is fetched only when the JWT references an unknown ``kid`` (Supabase key
-rotation).
+Supabase signs access tokens with asymmetric algorithms and publishes the
+current signing keys at ``{SUPABASE_URL}/auth/v1/.well-known/jwks.json``. The
+project's active signing key is ECC P-256 (``ES256``); ``RS256`` also remains
+supported for verification (legacy/rotated RSA keys). This module verifies
+tokens against that JWKS using the PyJWT ``PyJWKClient``. The key set is cached
+by the client, so verification normally performs **no** network I/O per request;
+a new key set is fetched only when the JWT references an unknown ``kid``
+(Supabase key rotation).
+
+Only an explicit asymmetric algorithm allowlist is accepted: ``ES256`` and
+``RS256``. The token header ``alg`` is never trusted dynamically -- ``none``,
+``HS256`` (the legacy Supabase shared-secret scheme) and every other algorithm
+are rejected. This backend deliberately has **no** shared-secret/JWT-secret
+verification path, so legacy HS256 tokens are not accepted here.
 
 Only verification lives here -- deliberately:
 
@@ -32,9 +40,11 @@ Configuration (environment variables)
 Behaviour
 ---------
 Fail closed: missing/partial configuration, a missing/malformed Authorization
-header, or an invalid/expired/tampered/wrong-audience/wrong-issuer token is
-rejected. The FastAPI dependency maps every failure to a generic HTTP 401.
-JWT contents, Authorization headers and signing secrets are never logged.
+header, an unsupported algorithm (anything outside the explicit
+``ES256``/``RS256`` allowlist, including ``HS256`` and ``none``), or an
+invalid/expired/tampered/wrong-audience/wrong-issuer token is rejected. The
+FastAPI dependency maps every failure to a generic HTTP 401. JWT contents,
+Authorization headers and signing secrets are never logged.
 """
 
 from __future__ import annotations
@@ -50,7 +60,11 @@ from fastapi import Header, HTTPException
 
 logger = logging.getLogger(__name__)
 
-_ALGORITHMS = ("RS256",)
+# Explicit asymmetric allowlist, never derived from the token header. Supabase's
+# current signing key is ECC P-256 (ES256); RS256 remains for legacy/rotated RSA
+# keys. HS256/shared-secret verification is intentionally NOT offered here
+# (algorithm-confusion and shared-secret leak surface) -- fail closed instead.
+_ALGORITHMS = ("ES256", "RS256")
 _DEFAULT_AUDIENCE = "authenticated"
 _GENERIC_DETAIL = "Not authenticated"
 

@@ -1,13 +1,16 @@
 """Unit tests for ``src/serving/auth.py`` — deterministic, no network access.
 
-Generates a throwaway RSA keypair and a matching JWKS structure, then exercises
-the verifier through a local key resolver (PyJWT ``PyJWK`` built from the JWKS
-dict). Real crypto, real signature/exp/aud/iss validation — no external calls.
+Generates throwaway RSA (RS256) and ECC P-256 (ES256) keypairs with matching
+JWKS structures, then exercises the verifier through a local key resolver
+(PyJWT ``PyJWK`` built from the JWKS dict). Real crypto, real
+signature/exp/aud/iss validation and algorithm-allowlist checks — no external
+calls.
 """
 
 from __future__ import annotations
 
 import base64
+import json
 import sys
 import time
 from pathlib import Path
@@ -15,7 +18,7 @@ from pathlib import Path
 import jwt as pyjwt  # noqa: N812
 import pytest
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
@@ -32,6 +35,7 @@ from src.serving.auth import (  # noqa: E402
 )
 
 KID = "test-key-1"
+EC_KID = "test-ec-key-1"
 ISSUER = "https://test-project.supabase.co/auth/v1"
 AUDIENCE = "authenticated"
 
@@ -59,6 +63,13 @@ class _StubJWKClient:
 def _b64url_int(value: int) -> str:
     length = (value.bit_length() + 7) // 8
     return base64.urlsafe_b64encode(value.to_bytes(length, "big")).rstrip(b"=").decode(
+        "ascii"
+    )
+
+
+def _b64url_fixed(value: int, size: int) -> str:
+    """RFC 7518 base64url for fixed-width EC coordinates (leading zeros kept)."""
+    return base64.urlsafe_b64encode(value.to_bytes(size, "big")).rstrip(b"=").decode(
         "ascii"
     )
 
@@ -123,6 +134,80 @@ def make_token(keys):
         )
 
     return _make
+
+
+@pytest.fixture(scope="module")
+def ec_keys() -> dict:
+    """A module-scoped ECC P-256 (secp256r1) keypair + matching JWKS dict.
+
+    Mirrors Supabase's current signing key type (ES256 / P-256).
+    """
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    numbers = private_key.public_key().public_numbers()
+    jwks = {
+        "keys": [
+            {
+                "kty": "EC",
+                "use": "sig",
+                "alg": "ES256",
+                "crv": "P-256",
+                "kid": EC_KID,
+                "x": _b64url_fixed(numbers.x, 32),
+                "y": _b64url_fixed(numbers.y, 32),
+            }
+        ]
+    }
+    return {"private_pem": private_pem.decode("ascii"), "jwks": jwks}
+
+
+@pytest.fixture
+def es_jwks_client(ec_keys) -> _StubJWKClient:
+    jwk = pyjwt.PyJWK(ec_keys["jwks"]["keys"][0])
+    return _StubJWKClient(jwk, EC_KID)
+
+
+@pytest.fixture
+def make_es256_token(ec_keys):
+    def _make(
+        *,
+        sub: str = "user-123",
+        aud: str = AUDIENCE,
+        iss: str = ISSUER,
+        exp_offset: int = 3600,
+        email: str | None = None,
+        kid: str = EC_KID,
+        extra: dict | None = None,
+    ) -> str:
+        now = int(time.time())
+        payload = {
+            "sub": sub,
+            "aud": aud,
+            "iss": iss,
+            "exp": now + exp_offset,
+            "iat": now,
+        }
+        if email is not None:
+            payload["email"] = email
+        if extra:
+            payload.update(extra)
+        headers = {"kid": kid, "alg": "ES256", "typ": "JWT"}
+        return pyjwt.encode(
+            payload, ec_keys["private_pem"], algorithm="ES256", headers=headers
+        )
+
+    return _make
+
+
+@pytest.fixture
+def supabase_env(monkeypatch):
+    """Deterministic SUPABASE_URL for verify_token-level tests (no ambient deps)."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
+    monkeypatch.delenv("API_KEYS", raising=False)
 
 
 @pytest.fixture
@@ -250,6 +335,105 @@ def test_verify_token_random_junk(jwks_client):
         )
 
 
+# ── Asymmetric algorithm allowlist (ES256 / RS256) ─────────────────────────────
+
+
+def test_verify_token_valid_es256(supabase_env, es_jwks_client, make_es256_token):
+    """Supabase's current signing key type (ECC P-256 / ES256) verifies via JWKS."""
+    token = make_es256_token(sub="user-es-1", email="es@example.com")
+    principal = verify_token(
+        token, jwks_client=es_jwks_client, audience=AUDIENCE, issuer=ISSUER
+    )
+    assert principal.sub == "user-es-1"
+    assert principal.email == "es@example.com"
+
+
+def test_verify_token_es256_wrong_audience(
+    supabase_env, es_jwks_client, make_es256_token
+):
+    token = make_es256_token(aud="admin")
+    with pytest.raises(AuthError):
+        verify_token(
+            token, jwks_client=es_jwks_client, audience=AUDIENCE, issuer=ISSUER
+        )
+
+
+def test_verify_token_es256_expired(supabase_env, es_jwks_client, make_es256_token):
+    token = make_es256_token(exp_offset=-3600)
+    with pytest.raises(AuthError):
+        verify_token(
+            token, jwks_client=es_jwks_client, audience=AUDIENCE, issuer=ISSUER
+        )
+
+
+def test_verify_token_hs256_rejected(supabase_env, keys, jwks_client):
+    """HS256 (shared secret) is rejected even when the ``kid`` is known.
+
+    The RSA key's ``kid`` is used so key resolution succeeds -- rejection must
+    come from the explicit algorithm allowlist, not from a missing key.
+    """
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "sub": "user-123",
+            "aud": AUDIENCE,
+            "iss": ISSUER,
+            "exp": now + 3600,
+            "iat": now,
+        },
+        "legacy-supabase-shared-secret-key-2026",
+        algorithm="HS256",
+        headers={"kid": KID, "alg": "HS256", "typ": "JWT"},
+    )
+    with pytest.raises(AuthError):
+        verify_token(token, jwks_client=jwks_client, audience=AUDIENCE, issuer=ISSUER)
+
+
+def test_verify_token_unsupported_algorithm_rejected(
+    supabase_env, keys, jwks_client
+):
+    """PS256 is asymmetric but outside the explicit allowlist -> rejected."""
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "sub": "user-123",
+            "aud": AUDIENCE,
+            "iss": ISSUER,
+            "exp": now + 3600,
+            "iat": now,
+        },
+        keys["private_pem"],
+        algorithm="PS256",
+        headers={"kid": KID, "alg": "PS256", "typ": "JWT"},
+    )
+    with pytest.raises(AuthError):
+        verify_token(token, jwks_client=jwks_client, audience=AUDIENCE, issuer=ISSUER)
+
+
+def test_verify_token_alg_none_rejected(supabase_env, jwks_client):
+    """Unsigned ``alg: none`` tokens are rejected (fail closed)."""
+    header = base64.urlsafe_b64encode(
+        json.dumps({"alg": "none", "typ": "JWT", "kid": KID}).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
+    body = base64.urlsafe_b64encode(
+        json.dumps(
+            {
+                "sub": "user-123",
+                "aud": AUDIENCE,
+                "iss": ISSUER,
+                "exp": int(time.time()) + 3600,
+            }
+        ).encode("utf-8")
+    ).rstrip(b"=").decode("ascii")
+    with pytest.raises(AuthError):
+        verify_token(
+            f"{header}.{body}.",
+            jwks_client=jwks_client,
+            audience=AUDIENCE,
+            issuer=ISSUER,
+        )
+
+
 def test_verify_token_unknown_kid(jwks_client, make_token):
     token = make_token(kid="unknown-kid-999")
     with pytest.raises(AuthError):
@@ -305,6 +489,73 @@ def test_dependency_email_never_becomes_identity(client, make_token):
     r = client.get("/me", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json()["sub"] == "user-42"
+
+
+def test_dependency_accepts_valid_es256_token(ec_keys, monkeypatch):
+    """End-to-end: ES256 (current Supabase key type) authenticates through JWKS."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
+    monkeypatch.setattr(
+        auth_module,
+        "_get_jwks_client",
+        lambda cfg: _StubJWKClient(pyjwt.PyJWK(ec_keys["jwks"]["keys"][0]), EC_KID),
+    )
+
+    es_app = FastAPI()
+
+    @es_app.get("/me")
+    async def me(principal: AuthPrincipal = Depends(require_auth)) -> dict:
+        return {"sub": principal.sub, "email": principal.email}
+
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "sub": "user-es-42",
+            "aud": AUDIENCE,
+            "iss": ISSUER,
+            "exp": now + 3600,
+            "iat": now,
+            "email": "es@example.com",
+        },
+        ec_keys["private_pem"],
+        algorithm="ES256",
+        headers={"kid": EC_KID, "alg": "ES256", "typ": "JWT"},
+    )
+    with TestClient(es_app) as c:
+        r = c.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sub"] == "user-es-42"
+    assert body["email"] == "es@example.com"
+
+
+def test_dependency_rejects_hs256_with_generic_401(jwks_client, monkeypatch):
+    """HS256 token -> 401 with the unchanged generic detail (no leak)."""
+    monkeypatch.setenv("SUPABASE_URL", "https://test-project.supabase.co")
+    monkeypatch.setattr(auth_module, "_get_jwks_client", lambda cfg: jwks_client)
+
+    hs_app = FastAPI()
+
+    @hs_app.get("/me")
+    async def me(principal: AuthPrincipal = Depends(require_auth)) -> dict:
+        return {"sub": principal.sub}
+
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "sub": "user-123",
+            "aud": AUDIENCE,
+            "iss": ISSUER,
+            "exp": now + 3600,
+            "iat": now,
+        },
+        "legacy-supabase-shared-secret-key-2026",
+        algorithm="HS256",
+        headers={"kid": KID, "alg": "HS256", "typ": "JWT"},
+    )
+    with TestClient(hs_app) as c:
+        r = c.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+    assert "Not authenticated" in r.text
 
 
 def test_dependency_missing_config_fails_closed(monkeypatch):

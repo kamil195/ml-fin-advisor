@@ -151,13 +151,26 @@ def test_profile_validation_rejects_negative_income(client):
 
 
 def test_profile_fields_match_current_product_schema(client):
-    """(14) only the product's current fields are accepted/returned."""
-    r = client.put("/consumer/profile", json=_PROFILE)
-    keys = set(r.json()["profile"])
-    assert keys == {
+    """(14) only the product's current fields are accepted/returned.
+
+    STEP 14 added the two optional Safe-to-Spend inputs — ``next_payday``
+    (horizon end) and ``safety_buffer`` (reserve); see SPEC §31 and
+    ``migrations/002_safe_to_spend.sql``. Both round-trip here, and neither
+    is ever invented when omitted.
+    """
+    r = client.put(
+        "/consumer/profile",
+        json={**_PROFILE, "next_payday": "2026-10-15", "safety_buffer": 150.0},
+    )
+    assert r.status_code == 200, r.text
+    profile = r.json()["profile"]
+    assert set(profile) == {
         "income", "savings_target", "liquid_buffer", "total_debt",
-        "monthly_debt_payments", "created_at", "updated_at",
+        "monthly_debt_payments", "next_payday", "safety_buffer",
+        "created_at", "updated_at",
     }
+    assert profile["next_payday"] == "2026-10-15"
+    assert profile["safety_buffer"] == 150.0
 
 
 def test_profile_failure_is_generic_503(client, store):

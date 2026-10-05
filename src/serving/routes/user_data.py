@@ -24,14 +24,14 @@ Failure model:
   closed). No SQL text, values, table names, or DSN reach the client.
 
 Cache coherency (STEP 12J): every mutation purges the *calling user's* derived
-cache entries (budgets / forecasts / features / explanations namespaces) via
-``CacheClient.purge_user`` — never a global invalidation.
+cache entries (budgets / forecasts / features / explanations / safe_to_spend
+namespaces) via ``CacheClient.purge_user`` — never a global invalidation.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -60,6 +60,12 @@ class FinancialProfileIn(BaseModel):
     Mirrors the fields currently supplied by callers: ``income`` and
     ``savings_target`` (budget optimiser) and ``liquid_buffer``,
     ``total_debt``, ``monthly_debt_payments`` (advise / financial profile).
+
+    STEP 14 adds two OPTIONAL inputs that Safe-to-Spend needs and that no
+    existing field expresses: ``next_payday`` (the horizon end) and
+    ``safety_buffer`` (the reserve to keep untouched). Both may be omitted —
+    Safe-to-Spend then reports what is missing instead of inventing a value
+    (migration ``002_safe_to_spend.sql``; see SPEC §31).
     """
 
     income: float = Field(..., ge=0, description="Monthly gross income (>= 0).")
@@ -67,6 +73,22 @@ class FinancialProfileIn(BaseModel):
     liquid_buffer: float | None = Field(default=None, ge=0)
     total_debt: float | None = Field(default=None, ge=0)
     monthly_debt_payments: float | None = Field(default=None, ge=0)
+    next_payday: date | None = Field(
+        default=None,
+        description=(
+            "Next payday (YYYY-MM-DD). Safe-to-Spend runs from today to this "
+            "date; when absent it falls back to a payday measured from your own "
+            "income deposits, and otherwise reports missing_payday."
+        ),
+    )
+    safety_buffer: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Amount to keep untouched before payday. Unset means 'not "
+            "configured' — no default buffer is invented."
+        ),
+    )
 
 
 def _require_store(request: Request) -> Any:
@@ -108,6 +130,17 @@ def _num(value: Any) -> float | None:
     return None if value is None else round(float(value), 2)
 
 
+def _iso_date(value: Any) -> str | None:
+    """ISO date string for a DATE column (str/date/datetime/None) — never guessed."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
+
+
 def _profile_out(row: dict[str, Any] | None) -> dict[str, Any] | None:
     """Public profile shape: product fields + timestamps, no owner_sub echo."""
     if row is None:
@@ -118,6 +151,8 @@ def _profile_out(row: dict[str, Any] | None) -> dict[str, Any] | None:
         "liquid_buffer": _num(row.get("liquid_buffer")),
         "total_debt": _num(row.get("total_debt")),
         "monthly_debt_payments": _num(row.get("monthly_debt_payments")),
+        "next_payday": _iso_date(row.get("next_payday")),
+        "safety_buffer": _num(row.get("safety_buffer")),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
     }

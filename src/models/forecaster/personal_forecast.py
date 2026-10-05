@@ -372,6 +372,7 @@ def predict(
     method: str | None = None,
     *,
     allow_prophet: bool = False,
+    start: date | None = None,
 ) -> dict[str, object]:
     """Build a complete, user-specific forecast result.
 
@@ -381,6 +382,11 @@ def predict(
     dispersion (``Z80``, 80% like the Prophet wrapper) and the **total** bounds
     are the sum of the daily bounds — a deliberately conservative assumption of
     correlated daily errors rather than a fabricated statistical claim.
+
+    ``start`` (STEP 14) anchors the first forecast day so a caller can forecast
+    an explicit horizon (e.g. tomorrow → payday) instead of the series end; when
+    omitted the behaviour is unchanged. The Prophet path always anchors on the
+    series end and ignores ``start``.
     """
     chosen = method or PRIMARY_METHOD
     fallback = FALLBACK_NONE
@@ -401,7 +407,7 @@ def predict(
             start = series.last_date + timedelta(days=1)  # type: ignore[operator]
             dates = [start + timedelta(days=i) for i in range(horizon_days)]
     else:
-        dates, points = predict_daily(series, horizon_days, chosen)
+        dates, points = predict_daily(series, horizon_days, chosen, start=start)
 
     sigma = _residual_scale(series, chosen if chosen != METHOD_PROPHET else METHOD_WEEKDAY_PROFILE)
     lower = [round(max(p - Z80 * sigma, 0.0), 2) for p in points]

@@ -334,6 +334,162 @@ class PersonalForecastResult(BaseModel):
     )
 
 
+# ── Safe to Spend (STEP 14) ───────────────────────────────────────────────────
+# Deterministic decision-support output: the arithmetic is authoritative on the
+# backend (never recomputed in frontend JavaScript) and every component is
+# returned so a client can show the exact breakdown. No accuracy, safety or
+# "guaranteed" claim is made about the number.
+
+
+class SafeToSpendComponent(BaseModel):
+    """One line of the deterministic Safe-to-Spend breakdown."""
+
+    label: str = Field(description="Human-readable component name.")
+    amount: float | None = Field(
+        default=None, description="Component amount in the response currency."
+    )
+    sign: str = Field(description="'+' for the funds term, '−' for subtractions.")
+    source: str = Field(description="Where the component comes from.")
+
+
+class SafeToSpendObligation(BaseModel):
+    """One protected category and what the caller's own history implies."""
+
+    category: str = Field(description="Protected category (CategoryL2 value).")
+    included: bool = Field(description="True when counted in this result.")
+    reason: str = Field(
+        description=(
+            "included | insufficient_observations | irregular_cadence | "
+            "already_paid_this_cycle | due_after_payday"
+        )
+    )
+    amount: float | None = Field(default=None, description="Counted amount.")
+    due_date: str | None = Field(default=None, description="Predicted due date (ISO).")
+    observations: int = Field(description="Payments observed in the caller's history.")
+    median_gap_days: int | None = Field(default=None, description="Measured cadence.")
+    last_paid_on: str | None = Field(default=None, description="Last observed payment.")
+
+
+class SafeToSpendScenario(BaseModel):
+    """Before/after view of an explicit, non-persisted scenario adjustment."""
+
+    label: str | None = Field(default=None, description="Scenario label, echoed back.")
+    amount: float = Field(description="Amount subtracted by the scenario.")
+    safe_to_spend_before: float | None
+    safe_to_spend_after: float | None
+    delta: float | None = Field(
+        default=None, description="before − after (equal to the amount)."
+    )
+    persisted: bool = Field(
+        default=False, description="Always false: scenarios never modify stored data."
+    )
+
+
+class SafeToSpendScenarioRequest(BaseModel):
+    """Optional 'what if I spend X before payday?' request body."""
+
+    scenario_amount: float = Field(
+        ...,
+        ge=0,
+        le=1_000_000_000,
+        description="Planned spend before payday (same currency as the response).",
+    )
+    label: str | None = Field(
+        default=None, max_length=120, description="Optional label, e.g. 'weekend trip'."
+    )
+
+
+class SafeToSpendResult(BaseModel):
+    """Deterministic, explainable Safe-to-Spend response (STEP 14).
+
+    ``status`` is authoritative and honest. Amounts are present only for
+    ``ready`` / ``limited_history``; every other status returns no number plus a
+    ``requirements`` block saying what is missing. ``explanation`` is a templated
+    breakdown of the arithmetic — it is never produced by a language model.
+    """
+
+    status: str = Field(
+        description=(
+            "ready | limited_history | insufficient_history | missing_payday | "
+            "missing_balance | missing_profile_data"
+        )
+    )
+    as_of: str = Field(description="Computation date (ISO), the 'today' anchor.")
+    currency: str | None = Field(
+        default=None,
+        description="Currency of every money field (from your own data; None if unobserved).",
+    )
+    next_payday: str | None = Field(default=None, description="Horizon end (ISO date).")
+    days_to_payday: int | None = Field(default=None, description="Days from today.")
+    current_available_funds: float | None = Field(
+        default=None, description="Your saved cash/liquid position (liquid_buffer)."
+    )
+    protected_obligations: float | None = Field(
+        default=None, description="Protected obligations due before payday."
+    )
+    protected_obligations_detail: list[SafeToSpendObligation] = Field(
+        default_factory=list, description="Every protected category and its reason."
+    )
+    expected_spending_before_payday: float | None = Field(
+        default=None,
+        description="Your own forecast of non-protected spending before payday (p50).",
+    )
+    expected_spending_p10: float | None = Field(default=None)
+    expected_spending_p90: float | None = Field(default=None)
+    safety_buffer: float | None = Field(
+        default=None, description="Reserve held back (0.00 when not configured)."
+    )
+    safety_buffer_source: str = Field(
+        description="profile | not_configured (an unconfigured buffer is never invented)."
+    )
+    scenario_adjustment: float = Field(
+        default=0.0, description="Amount subtracted by the requested scenario."
+    )
+    scenario: SafeToSpendScenario | None = Field(
+        default=None, description="Before/after view when a scenario was supplied."
+    )
+    safe_to_spend: float | None = Field(
+        default=None,
+        description=(
+            "The amount, or None when an input/history is missing. Can be "
+            "negative — it is never floored, and is_negative flags a shortfall."
+        ),
+    )
+    is_negative: bool = Field(
+        default=False, description="True when safe_to_spend is a shortfall (< 0)."
+    )
+    forecast_status: str = Field(
+        description="STEP 13 status of the user-specific forecast used (personalized/limited/insufficient)."
+    )
+    forecast_method: str = Field(
+        description="Forecasting method used; the global/static forecast is never used here."
+    )
+    forecast_fallback_status: str = Field(
+        description="STEP 13 fallback label (none | user_recent_baseline | primary_substituted)."
+    )
+    payday_source: str | None = Field(
+        default=None, description="profile | measured_from_income_history | None."
+    )
+    history_days_used: int = Field(description="Days of your own non-obligation history used.")
+    transaction_count_used: int = Field(description="Your own spend transactions used.")
+    distinct_spend_days_used: int
+    excluded_pending_transactions: int = Field(
+        description="Pending rows excluded from history, obligations and the forecast."
+    )
+    breakdown: list[SafeToSpendComponent] = Field(
+        default_factory=list, description="Exact component-by-component arithmetic."
+    )
+    assumptions: list[str] = Field(
+        default_factory=list, description="Every assumption used, stated explicitly."
+    )
+    requirements: dict[str, object] | None = Field(
+        default=None, description="What is needed to produce an amount (when missing)."
+    )
+    explanation: str = Field(description="Templated, deterministic breakdown text.")
+    engine_version: str = Field(description="Engine identifier (cache/reproducibility).")
+    message: str | None = Field(default=None, description="Optional clarifying note.")
+
+
 # ── Budget Recommendation ─────────────────────────────────────────────────────
 
 

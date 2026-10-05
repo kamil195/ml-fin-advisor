@@ -43,7 +43,7 @@ Financial Data
 | Decision Recommendations | Deterministic |
 | CSV Ingestion | With validation and ownership enforcement |
 | Authentication | Supabase JWT (Steps 1–3 committed) |
-| Safe-to-Spend | Planned |
+| Safe-to-Spend | Deterministic backend calculation from your own persisted data (`GET /consumer/safe-to-spend`; frontend wiring pending) |
 | AI Copilot | Future |
 
 ---
@@ -139,6 +139,8 @@ This starts the API and Redis services; the API is exposed on port `8000`.
 | POST | `/consumer/classify/live` | Live classification |
 | POST | `/consumer/forecast/live` | Live forecast |
 | POST | `/consumer/budget/live` | Live budget |
+| GET | `/consumer/safe-to-spend` | Safe-to-Spend before payday (your own data) |
+| POST | `/consumer/safe-to-spend/scenario` | Same, with a non-persisted "what if" scenario |
 
 ### Public Endpoints
 
@@ -151,7 +153,7 @@ This starts the API and Redis services; the API is exposed on port `8000`.
 
 ## Authentication
 
-Supabase JWT (RS256) verified via JWKS. Fail-closed: missing/invalid token → 401.
+Supabase JWT verified via JWKS — **ES256** (current Supabase signing key, ECC P-256) and **RS256** (legacy/rotated RSA keys). HS256/shared-secret tokens are intentionally not accepted on this path. Fail-closed: missing/invalid token → 401.
 
 | Component | File |
 |---|---|
@@ -237,15 +239,16 @@ Deterministic engines. No randomness, no LLM calls. All numbers from underlying 
 | Privacy / claims / frontend-auth / branding / frontend-security / CSV-ingest batch | 107 passed |
 | Advise + classify endpoint suites | 15 passed |
 | Persistence: transactions / profiles / data-lifecycle (Step 12) | 27 passed |
-| **Full unit suite** | **389 passed, 1 skipped** |
+| Safe-to-Spend engine + endpoints (Step 14) | 71 passed |
+| **Full unit suite** | **503 passed, 1 skipped** |
 | compileall | exit 0 |
 
 ---
 
 ## Current Limitations
 
-- Forecast artifact is global/demo/static (not personalized); no personalized forecasting yet
-- Safe-to-Spend not implemented/validated yet
+- Forecast artifact is global/demo/static (not personalized); personalized forecasting exists (`GET /consumer/forecast`) but is not validated with real users yet
+- Safe-to-Spend backend exists (STEP 14) but is not yet wired into the browser interface, and no input has been validated with real users yet
 - Persistence (Step 12) is an MVP foundation: profile + transactions only; retention/backup policy unresolved; Supabase Auth account deletion is separate and not implemented
 - No privacy policy/terms
 - No observability/monitoring

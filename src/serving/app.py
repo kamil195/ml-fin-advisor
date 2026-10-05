@@ -129,6 +129,7 @@ def create_app() -> FastAPI:
     from src.serving.routes.ingest import router as ingest_router
     from src.serving.routes.live import router as live_router
     from src.serving.routes.personal_forecast import router as personal_forecast_router
+    from src.serving.routes.safe_to_spend import router as safe_to_spend_router
     from src.serving.routes.user_data import router as user_data_router
 
     app = FastAPI(
@@ -227,6 +228,11 @@ def create_app() -> FastAPI:
     # STEP 13: user-specific forecasting from the caller's OWN persisted history.
     app.include_router(
         personal_forecast_router, tags=["Forecasting"],
+        dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
+    )
+    # STEP 14: deterministic Safe-to-Spend (today → next payday, owner-scoped).
+    app.include_router(
+        safe_to_spend_router, tags=["Safe to Spend"],
         dependencies=[Depends(require_auth), Depends(enforce_rate_limit)],
     )
 

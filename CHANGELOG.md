@@ -19,6 +19,35 @@ Verified repository history for Planwisely. Only changes supported by repository
 
 ---
 
+## 2026-09-30 — AUTH: ES256 + RS256 JWKS verification (Working tree — not yet committed)
+
+**Supabase JWT algorithm compatibility** — `src/serving/auth.py`.
+
+- **Problem:** authenticated requests returned 401 because verification only allowlisted RS256 while the Supabase project's current signing key is ECC P-256 — current access tokens are ES256.
+- **Change:** explicit asymmetric allowlist `("ES256", "RS256")` in `_ALGORITHMS`. ES256 verifies the current key; RS256 remains for legacy/rotated RSA keys. The header `alg` is never trusted dynamically; `none`, `HS256` (the legacy Supabase shared-secret scheme) and every other algorithm are rejected fail-closed. No shared-secret verification path was added, and no JWT shared-secret env var is read anywhere in this backend.
+- **Unchanged:** JWKS endpoint and issuer derived from `SUPABASE_URL`, audience from `SUPABASE_JWT_AUDIENCE`, `exp`/`sub` requirements, Bearer parsing, identity exclusively from the verified `sub`, generic `401 {"detail":"Not authenticated"}`, and no logging of tokens, headers, keys or claims.
+- **Tests:** `tests/unit/test_auth.py` 20 → **28** (added: ES256 valid via JWKS; ES256 wrong-audience; ES256 expired; HS256-with-known-`kid` rejected; PS256 rejected; `alg: none` rejected; ES256 end-to-end through `require_auth`; HS256 → generic 401 through `require_auth`). Targeted run: `test_auth.py` + `test_auth_routes.py` **48 passed**.
+- **Docs:** `src/serving/auth.py` module docstring, SPEC §9/§9.1, ARCHITECTURE §6 flow, README Authentication section — all now state ES256 + RS256 verified via JWKS, with HS256/shared-secret tokens intentionally not accepted on this path.
+- **Verification (2026-09-30):** targeted auth (`test_auth.py` + `test_auth_routes.py`) **48 passed**; claims/branding/forecast/frontend-security/security-headers batch **111 passed**; Step 14 batch (`test_safe_to_spend.py` + `test_persistence_profiles.py`) **80 passed**; full unit suite **503 passed, 1 skipped, 0 failed** (1356.77 s); `compileall src pipelines run_pipeline.py tests` exit 0; CI lint gate `flake8 --select=F821` exit 0; `git diff --check` exit 0; serving-app import sanity OK.
+
+---
+
+## 2026-09-30 — PRODUCT STEP 14 (Working tree — not yet committed)
+
+**Safe-to-Spend engine and endpoints** — `src/services/safe_to_spend.py`, `src/serving/routes/safe_to_spend.py`.
+
+- **Formula:** `safe_to_spend = liquid_buffer − protected obligations before payday − expected spending before payday − safety buffer − scenario adjustment`, computed by a pure, deterministic engine (`safe-to-spend-v1`) from the caller's own persisted data only — no wall-clock reads, no randomness, no global artifact.
+- **New endpoints:** `GET /consumer/safe-to-spend` and `POST /consumer/safe-to-spend/scenario` (JWT-protected; identity solely from `principal.sub`; no request field selects whose data is used; the scenario affects that one response and is never persisted).
+- **Honest statuses:** `missing_profile_data` / `missing_balance` / `missing_payday` for missing inputs; `insufficient_history` returns requirements and no amount; `limited_history` is labelled low-confidence; negative results are returned as-is (`is_negative`), never floored; an unconfigured buffer is `0.00` with `buffer_configured: false`.
+- **Payday:** configured `next_payday` (1–45 days) → cadence measured from the caller's own income deposits → `missing_payday`. Protected obligations are the six `HARD_PROTECTED_CATEGORIES`, inferred from observed cadence and counted only when due after today and on/before payday (already-paid items are not counted twice; `Uncategorized` is never protected).
+- **Profile inputs:** optional `next_payday` and `safety_buffer` added to the profile write/read shape (`migrations/002_safe_to_spend.sql`); both are optional and never invented.
+- **Caching:** `safe_to_spend:<sub>:<payday>:<scenario_hash>:<engine>`, 1 h TTL; amount-less statuses are not cached; `as_of` must be today to reuse an entry; ingest / profile mutation / data deletion purge the caller's prefix via `purge_user`.
+- **Tests:** `tests/unit/test_safe_to_spend.py` (71 tests: engine arithmetic and honesty, payday resolution, obligation inference, forecast horizon, endpoints, owner isolation, cache scoping/freshness/invalidation, read-only scenario, error mapping). `tests/unit/test_persistence_profiles.py` updated for the two new profile fields.
+- **Docs:** SPEC §3, §8.1, §15, §25 corrected and §31 rewritten (the route previously cited a non-existent §21 — now §31); ARCHITECTURE §16c added; ROADMAP Phase 8 updated; README capability/endpoint/limitations tables updated.
+- **Verification (2026-09-30):** full unit suite **495 passed, 1 skipped** (~1272 s); focused batch (Safe-to-Spend + profile persistence + claims/branding/forecast doc scans) **149 passed**; `compileall src tests` exit 0.
+
+---
+
 ## 2026-09-13 — AUTH STEP 3 (Committed locally; NOT pushed)
 
 **Commit:** `9b34da0`
@@ -66,7 +95,7 @@ Known remaining limitations (unchanged by Step 3):
 **Message:** `feat(auth): add Supabase JWT verification foundation`
 
 - `AuthPrincipal`, `require_auth`, `verify_token`
-- Supabase JWKS retrieval and RS256 signature/claims verification
+- Supabase JWKS retrieval and RS256 signature/claims verification (as implemented at that commit; ES256 support added later — see the 2026-09-30 AUTH ES256/RS256 entry)
 - Fail-closed semantics: 401 on missing/invalid token or missing configuration
 - Unit tests for token verification (`tests/unit/test_auth.py`, 20 tests)
 

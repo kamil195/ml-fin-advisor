@@ -34,7 +34,7 @@ The LLM is **not required** for the system to be "AI." Planwisely already uses s
 
 **"Know what you can safely spend before payday."**
 
-Safe-to-Spend is the central product direction. It is **not yet implemented** as a production calculation. It is a design target that requires backend support.
+Safe-to-Spend is the central product direction, and it is now implemented as a deterministic, explainable backend calculation (§31): `GET /consumer/safe-to-spend` answers it from the caller's own persisted data. The browser interface has not been wired to it yet, and the amount is decision support — never a guarantee.
 
 ---
 
@@ -67,7 +67,7 @@ Safe-to-Spend is the central product direction. It is **not yet implemented** as
 | Authentication (Step 1) | COMMITTED LOCALLY (`1a5eb8a`) — NOT pushed |
 | Protected Routes (Step 2) | COMMITTED LOCALLY (`024465c`) — NOT pushed |
 | Ownership / Isolation (Step 3) | COMMITTED LOCALLY (`9b34da0`) — NOT pushed |
-| Safe-to-Spend | Planned — not implemented |
+| Safe-to-Spend | Implemented (STEP 14) — deterministic backend calculation from the caller's own data; frontend wiring pending |
 | AI Copilot | Future — not implemented |
 | Financial Intelligence API | Future — not implemented |
 | Production Database | Not implemented — artifacts + cache only |
@@ -141,6 +141,8 @@ The serving layer is a **FastAPI** application:
 | DELETE | `/consumer/transactions/{id}` | Delete one caller-owned transaction |
 | GET | `/consumer/data/export` | Export all caller-owned persisted data (JSON) |
 | DELETE | `/consumer/data` | Delete all caller-owned persisted data (fail-closed, transactional) |
+| GET | `/consumer/safe-to-spend` | Safe-to-Spend before payday, from the caller's own data (STEP 14) |
+| POST | `/consumer/safe-to-spend/scenario` | Same, with a scenario that is applied to that response only and never persisted |
 
 ### 8.2 Public Endpoints (intentionally public)
 
@@ -155,7 +157,7 @@ The serving layer is a **FastAPI** application:
 
 ## 9. Authentication Architecture
 
-Planwisely uses **Supabase JWT** authentication. Tokens are verified against the Supabase JWKS endpoint using RS256.
+Planwisely uses **Supabase JWT** authentication. Tokens are verified against the Supabase JWKS endpoint using an explicit asymmetric algorithm allowlist — **ES256** (the project's current signing key, ECC P-256) and **RS256** (legacy/rotated RSA keys). HS256/shared-secret tokens are intentionally not accepted on this path, and the header `alg` is never trusted dynamically.
 
 | Component | File | Description |
 |---|---|---|
@@ -169,7 +171,7 @@ Planwisely uses **Supabase JWT** authentication. Tokens are verified against the
 ```
 Client
   → Supabase Auth (login/signup)
-  → JWT (RS256 signed)
+  → JWT (ES256/RS256 signed)
   → FastAPI require_auth dependency
   → verify_token (JWKS verification)
   → AuthPrincipal(sub=...)
@@ -264,8 +266,9 @@ For `POST /consumer/transactions/ingest-csv`:
 | Budgets | `("budgets", principal.sub)` |
 | Features | `("features", principal.sub, ...)` |
 | Explanations | `("explanations", ...)` |
+| Safe-to-Spend | `("safe_to_spend", principal.sub, payday, scenario_hash, engine_version)` |
 
-**TTLs:** Features 6h, Forecasts 24h, Budgets 7d, Explanations 30d.
+**TTLs:** Features 6h, Forecasts 24h, Budgets 7d, Explanations 30d, Safe-to-Spend 1h.
 
 **Isolation guarantee:** the ownership gate (403) runs **before** any cache read, so User A cannot retrieve User B's cache entry by manipulating a body/path `user_id`.
 
@@ -397,7 +400,7 @@ Performs **no financial arithmetic of its own** — every number in `DecisionRes
 
 ## 25. Caching
 
-`src/serving/cache.py` — `CacheClient`: Redis primary, in-memory dict fallback. Identity-namespaced per §15. TTLs per SPEC §11.3 (features 6h, forecasts 24h, budgets 7d, explanations 30d).
+`src/serving/cache.py` — `CacheClient`: Redis primary, in-memory dict fallback. Identity-namespaced per §15. TTLs per SPEC §11.3 (features 6h, forecasts 24h, budgets 7d, explanations 30d, safe_to_spend 1h). Both paths honour TTLs, and mutations purge only the calling user's own namespaces through `purge_user`.
 
 ---
 
@@ -437,11 +440,40 @@ HTTP 400/401/403/404/500. **Known risk:** error detail leakage via `detail=str(e
 
 ---
 
-## 31. Future Safe-to-Spend Architecture
+## 31. Safe to Spend (STEP 14 — implemented)
 
-Safe-to-Spend answers: "How much can I safely spend before payday?" Conceptual inputs: current financial position, upcoming obligations, budget constraints, forecast, savings goals, transaction behavior.
+Safe-to-Spend answers: "How much can I safely spend before payday?" It is a deterministic calculation over the caller's own persisted data. Engine: `src/services/safe_to_spend.py` (pure: no database/cache/network access, no wall-clock reads, no randomness). Endpoints: `src/serving/routes/safe_to_spend.py`. The backend is authoritative — the frontend must never recalculate it.
 
-**Status: PLANNED — not implemented.** The frontend must not calculate it independently; backend logic is required.
+### 31.1 Formula
+
+```text
+safe_to_spend = current_available_funds              (profile.liquid_buffer; never derived from history)
+              − protected_obligations_before_payday  (six HARD_PROTECTED_CATEGORIES, due after today and on/before payday)
+              − expected_spending_before_payday      (STEP 13 user-specific forecast, today+1 … payday, non-protected spend only)
+              − safety_buffer                        (only what the caller configured; 0.00 when unconfigured, labelled as such)
+              − scenario_adjustment                  (POST scenario only; applied to that response, never persisted)
+```
+
+### 31.2 Honesty rules
+
+- **Payday:** the profile's `next_payday` when in the future (1–45 days), else cadence measured from the caller's own income deposits (`measured_from_income_history`), else `missing_payday`. A payday is never assumed.
+- **Balance:** only the persisted `liquid_buffer`; a missing balance yields `missing_balance`, never a derived number.
+- **Status precedence (first match wins):** `missing_profile_data` → `missing_balance` → `missing_payday` → `insufficient_history` → `limited_history` → `ready`. Only `ready` / `limited_history` carry an amount; `limited_history` is labelled low-confidence; `insufficient_history` returns requirements and **no number**.
+- **No double-counting:** expected spending covers non-protected spend only (protected obligations are subtracted separately); an obligation already paid this cycle is not counted again.
+- **Negative results are not floored** — a shortfall is reported as-is with `is_negative`.
+- Pending rows are excluded and counted; credits are never netted into expected spending; `Uncategorized` is never protected; irregular-cadence obligations are reported, not guessed.
+- Money: float rounded to 2 decimals in the caller's own observed currency. Engine version `safe-to-spend-v1`.
+
+### 31.3 Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/consumer/safe-to-spend` | Identity solely from `principal.sub`; no request field selects whose data is used |
+| POST | `/consumer/safe-to-spend/scenario` | Scenario body affects that one response only; no store method is called for it |
+
+**Caching:** `safe_to_spend:<sub>:<payday>:<scenario_hash>:<engine>` — user-scoped, payday-scoped, engine-version aware, TTL 1 h; responses without an amount are never cached; `as_of` must equal the current date for a cached entry to be reused; ingest / profile mutation / data deletion purge the caller's `safe_to_spend:<sub>:*` prefix via `purge_user`.
+
+Deterministic decision-support output — not financial advice; no accuracy, safety or guaranteed-outcome claim.
 
 ---
 
@@ -484,15 +516,16 @@ Privacy policy, terms of service, support/contact, and account/data deletion flo
 | Suite | Result |
 |---|---|
 | `tests/unit/test_ownership.py` | 22 passed |
-| `tests/unit/test_auth.py` | 20 passed |
-| `tests/unit/test_auth_routes.py` | 21 passed |
+| `tests/unit/test_auth.py` | 28 passed |
+| `tests/unit/test_auth_routes.py` | 20 passed |
 | `tests/unit/test_classify_endpoint.py` | 7 passed |
 | `tests/unit/test_csv_ingest_endpoint.py` | 10 passed |
 | `tests/unit/test_advise_endpoint.py` | 12 passed |
-| **Full unit suite** | **224 passed, 1 skipped** (2 warnings, ~413 s) |
-| `compileall src/serving tests/unit` | exit 0 |
+| `tests/unit/test_safe_to_spend.py` (STEP 14) | 71 passed |
+| **Full unit suite** | **503 passed, 1 skipped** (35 warnings, ~1357 s) |
+| `compileall src tests` | exit 0 |
 
-Results reflect the verified Step 3 implementation (commit `9b34da0`).
+Last full-suite verification: 2026-09-30, working tree including STEP 14 (Safe-to-Spend engine, endpoints, and its test suite) and the ES256/RS256 auth allowlist change; both remain uncommitted at this point.
 
 ---
 

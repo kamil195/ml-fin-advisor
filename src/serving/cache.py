@@ -6,6 +6,8 @@ Cache strategy:
   - Forecasts: TTL 24h, invalidate on nightly batch run
   - Budget recommendations: TTL 7d, invalidate on preference change
   - SHAP explanations: TTL 30d, invalidate on model version change
+  - Safe-to-Spend (STEP 14): TTL 1h, invalidate on any mutation of the inputs
+    (transaction ingest/deletion, profile or payday/safety-buffer change)
 
 Privacy/data-lifecycle (SECURITY STEP 8): both the Redis path and the
 in-memory fallback honour TTLs — cached user-scoped data is never retained
@@ -147,7 +149,12 @@ class CacheClient:
     # JWT subject. `budgets:<sub>` is an exact single key; the other
     # namespaces key as `<ns>:<sub>:<parts>` and are removed by prefix,
     # restricted to the caller's own subject.
-    USER_CACHE_NAMESPACES = ("budgets", "forecasts", "features", "explanations")
+    # `safe_to_spend` (STEP 14) keys as
+    # `safe_to_spend:<sub>:<payday>:<scenario_hash>:<engine_version>`, so the
+    # same prefix rule applies.
+    USER_CACHE_NAMESPACES = (
+        "budgets", "forecasts", "features", "explanations", "safe_to_spend",
+    )
 
     def invalidate_prefix(self, prefix: str) -> int:
         """Remove every entry whose key starts with ``prefix``; returns count."""
@@ -185,4 +192,9 @@ CACHE_TTLS = {
     "forecasts": 24 * 3600,     # 24 hours
     "budgets": 7 * 24 * 3600,   # 7 days
     "explanations": 30 * 24 * 3600,  # 30 days
+    # STEP 14: Safe-to-Spend is a spending decision, so it is the shortest-lived
+    # derived value in the cache. Mutations (ingest / profile / delete) purge it
+    # immediately; the TTL only bounds how long a *read-only* response may be
+    # reused without a new computation.
+    "safe_to_spend": 3600,      # 1 hour
 }

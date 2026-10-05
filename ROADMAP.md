@@ -157,8 +157,14 @@ Do not fake personalization.
   `personalized` / `limited_history` / `insufficient_history` statuses and a
   user-specific fallback (a global artifact is never substituted). The legacy
   global endpoint now labels itself `not_personalized`.
+- ✅ **Delivered (STEP 14):** Safe-to-Spend — `GET /consumer/safe-to-spend`
+  (+ non-persisted `/scenario`) computes, deterministically and only from the
+  caller's own persisted data, how much can be spent before payday: explicit
+  statuses for every missing input, no floored negatives, no invented payday
+  or buffer, per-user 1h cache invalidated on ingest/profile/data changes.
 - ⏳ **Remaining:** per-user model tournament at scale, retention/backups,
-  Safe-to-Spend.
+  frontend wiring for Safe-to-Spend (the browser interface does not display
+  it yet).
 
 ---
 

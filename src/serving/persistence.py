@@ -90,7 +90,8 @@ _TXN_COLS = (
 )
 _PROFILE_COLS = (
     "owner_sub, income, savings_target, liquid_buffer, "
-    "total_debt, monthly_debt_payments, created_at, updated_at"
+    "total_debt, monthly_debt_payments, next_payday, safety_buffer, "
+    "created_at, updated_at"
 )
 
 
@@ -234,6 +235,29 @@ class PostgresStore:
                 cur.execute(sql, (owner_sub, since))
                 return list(cur.fetchall())
 
+    def fetch_financial_history(
+        self, owner_sub: str, since: datetime
+    ) -> list[dict[str, Any]]:
+        """Return ``owner_sub``'s own transaction rows for the STEP 14 engine.
+
+        Owner-scoped exactly like every other repository method (the caller
+        passes the verified JWT subject; there is no unscoped fallback), ordered
+        chronologically. Columns are the ones Safe-to-Spend needs: amount and
+        date (forecast), category (protected obligations), currency (money
+        representation) and ``is_pending`` (pending rows must be excluded from
+        evidence rather than counted as settled).
+        """
+        sql = (
+            "SELECT occurred_at, amount, currency, category_l2, channel, is_pending"
+            " FROM transactions"
+            " WHERE owner_sub = %s AND occurred_at >= %s"
+            " ORDER BY occurred_at"
+        )
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (owner_sub, since))
+                return list(cur.fetchall())
+
     def delete_transaction(self, owner_sub: str, transaction_id: str) -> bool:
         """Delete one transaction iff it is owned by ``owner_sub`` (scoped)."""
         sql = "DELETE FROM transactions WHERE id = %s AND owner_sub = %s"
@@ -271,13 +295,16 @@ class PostgresStore:
         sql = (
             "INSERT INTO user_profiles ("
             "owner_sub, income, savings_target, liquid_buffer, total_debt,"
-            " monthly_debt_payments) VALUES (%s, %s, %s, %s, %s, %s)"
+            " monthly_debt_payments, next_payday, safety_buffer)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (owner_sub) DO UPDATE SET"
             " income = EXCLUDED.income,"
             " savings_target = EXCLUDED.savings_target,"
             " liquid_buffer = EXCLUDED.liquid_buffer,"
             " total_debt = EXCLUDED.total_debt,"
             " monthly_debt_payments = EXCLUDED.monthly_debt_payments,"
+            " next_payday = EXCLUDED.next_payday,"
+            " safety_buffer = EXCLUDED.safety_buffer,"
             " updated_at = now()"
             f" RETURNING {_PROFILE_COLS}"
         )
@@ -288,6 +315,8 @@ class PostgresStore:
             data.get("liquid_buffer"),
             data.get("total_debt"),
             data.get("monthly_debt_payments"),
+            data.get("next_payday"),
+            data.get("safety_buffer"),
         )
         with self._transaction() as conn:
             with conn.cursor() as cur:

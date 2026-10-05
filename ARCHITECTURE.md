@@ -117,7 +117,7 @@ Every untrusted input crosses the boundary only through server-side `require_aut
 
 ```text
 1. User logs in via Supabase Auth
-2. Supabase issues JWT (RS256 signed)
+2. Supabase issues JWT (ES256/RS256 signed)
 3. Client includes JWT in Authorization header
 4. FastAPI require_auth dependency intercepts request
 5. verify_token validates JWT against Supabase JWKS
@@ -263,8 +263,9 @@ JWT sub (owner) ──► src/serving/persistence.py (psycopg 3, server-side DSN
   habit strengths / compliance history. Deployment without `DATABASE_URL`
   disables only the user-data routes (generic 503); everything else runs.
 * Deliberately unchanged in this step: classifier, forecast math, budget
-  math, ScenarioEngine/DecisionEngine; Safe-to-Spend remains unimplemented.
-  (Forecasting became user-specific in STEP 13 — see §16b.)
+  math, ScenarioEngine/DecisionEngine. (Forecasting became user-specific in
+  STEP 13 — see §16b; Safe-to-Spend became a backend calculation in STEP 14 —
+  see §16c.)
 
 Honesty rules: Income ONLY from CategoryL2.INCOME. No fabricated income.
 
@@ -303,6 +304,45 @@ principal.sub ─► fetch_spend_history(owner_sub, since)   (120-day lookback)
   different dataset and is not comparable to the numbers above.
 * Cache: `forecasts:<sub>:personal:<horizon>:user-v1` (24h TTL), purged by
   ingest / profile change / data deletion; insufficient responses not cached.
+
+---
+
+## 16c. Safe to Spend (STEP 14 — deterministic, owner-scoped)
+
+```text
+principal.sub ─► get_profile (liquid_buffer · next_payday · safety_buffer)
+             ─► fetch_financial_history (owner-scoped, 120-day lookback)
+             ─► payday: configured next_payday → measured income cadence → missing_payday
+             ─► STEP 13 user-specific forecast summed over today+1 … payday
+             ─► ready | limited_history amounts (statuses with no number never cached)
+```
+
+* Formula (single source of truth, `src/services/safe_to_spend.py`):
+  `safe_to_spend = funds − protected_obligations − expected_spending − buffer − scenario`.
+  Pure function layer — no wall-clock reads, no randomness, no network; the
+  same inputs always produce the same number (`safe-to-spend-v1`).
+* Identity: `GET /consumer/safe-to-spend` derives everything from
+  `principal.sub`; no request field can select whose data is used, and every
+  input query in `src/serving/persistence.py` is owner-scoped.
+* Honest statuses, in precedence order: `missing_profile_data`,
+  `missing_balance`, `missing_payday`, `insufficient_history`,
+  `limited_history`, `ready`. Only `ready`/`limited_history` carry a number;
+  `insufficient_history` returns requirements and no amount; negative results
+  are reported as-is (`is_negative`), never floored to zero.
+* Protected obligations are the existing `HARD_PROTECTED_CATEGORIES` (six),
+  inferred from the caller's own observed cadence, counted only when due after
+  today and on/before payday — paid-once items are not counted twice,
+  `Uncategorized` is never protected, irregular cadences are reported rather
+  than guessed.
+* Safety buffer: only what the caller configured; unset → `0.00` with
+  `buffer_configured: false`, never a default the user did not choose.
+* Scenarios (`POST /consumer/safe-to-spend/scenario`) are applied to that
+  response only and never persisted — no store method is called for them.
+* Cache: `safe_to_spend:<sub>:<payday>:<scenario_hash>:<engine>` (1h TTL),
+  amount-less statuses not cached, `as_of` must be today to reuse an entry,
+  purged per user by ingest / profile mutation / data deletion.
+* Frontend renders the backend's number; it never recalculates it. This is
+  decision support, not financial advice — no accuracy or guarantee claim.
 
 ---
 
@@ -382,7 +422,7 @@ No financial arithmetic of its own. All numbers from underlying services.
 
 ## 25. Future Architecture
 
-- **Safe-to-Spend:** Central calculation (planned)
+- **Safe-to-Spend frontend:** browser-interface display of the backend's number (backend calculation delivered in STEP 14 — §16c)
 - **AI Copilot:** Provider-agnostic LLM interface (future)
 - **Financial Intelligence API:** External API productization (future)
 - **Agent Interoperability:** Scoped auth for external agents (future)
